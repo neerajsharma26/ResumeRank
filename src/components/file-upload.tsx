@@ -23,13 +23,25 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const handleNewFiles = (newFiles: File[]) => {
+    if (isMultiple) {
+      const combined = [...files, ...newFiles];
+      const uniqueFiles = combined.filter(
+        (file, index, self) =>
+          index === self.findIndex((f) => f.name === file.name)
+      );
+      onFilesChange(uniqueFiles.slice(0, 15));
+    } else {
+      onFilesChange(newFiles.slice(0, 1));
+    }
+  };
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
-      const newFiles = Array.from(event.target.files);
-      if (isMultiple) {
-        onFilesChange([...files, ...newFiles].slice(0, 15)); // Limit to 15 files
-      } else {
-        onFilesChange(newFiles.slice(0, 1));
+      handleNewFiles(Array.from(event.target.files));
+      // Reset the input value to allow re-uploading the same file
+      if(inputRef.current) {
+        inputRef.current.value = '';
       }
     }
   };
@@ -45,12 +57,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       if (disabled) return;
-      const newFiles = Array.from(e.dataTransfer.files);
-      if (isMultiple) {
-          onFilesChange([...files, ...newFiles].slice(0,15));
-      } else {
-          onFilesChange(newFiles.slice(0,1));
-      }
+      handleNewFiles(Array.from(e.dataTransfer.files));
   }
 
   return (
