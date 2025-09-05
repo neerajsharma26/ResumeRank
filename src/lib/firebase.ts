@@ -7,7 +7,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyCQJ6kWgVkL1bA7rzysbxOvKdidgaZj7qM",
   authDomain: "resumerank-8lirw.firebaseapp.com",
   projectId: "resumerank-8lirw",
-  storageBucket: "resumerank-8lirw.appspot.com",
+  storageBucket: "resumerank-8lirw.firebasestorage.app",
   messagingSenderId: "975406147971",
   appId: "1:975406147971:web:225780758e836b72b1aeb6"
 };
