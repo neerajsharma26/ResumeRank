@@ -20,3 +20,9 @@ export type AnalysisResult = {
   rankedResumes: RankResumesOutput;
   details: AnalysisDetails;
 };
+
+export interface MetricWeights {
+  skills: number;
+  experience: number;
+  education: number;
+}

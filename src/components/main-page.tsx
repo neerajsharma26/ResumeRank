@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { analyzeResumesAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-import type { AnalysisResult, Resume } from '@/lib/types';
+import type { AnalysisResult, Resume, MetricWeights } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import type * as PdfJs from 'pdfjs-dist';
 
@@ -15,6 +15,7 @@ import { Loader2, Sparkles, ArrowLeft } from 'lucide-react';
 import { FileUpload } from './file-upload';
 import { ComparisonModal } from './comparison-modal';
 import { ResumeViewerModal } from './resume-viewer-modal';
+import { WeightSliders } from './weight-sliders';
 
 // Dynamically import pdfjs-dist only on the client side
 const pdfjsLibPromise = import('pdfjs-dist');
@@ -24,6 +25,11 @@ pdfjsLibPromise.then(lib => {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
 });
 
+const DEFAULT_WEIGHTS: MetricWeights = {
+  skills: 8,
+  experience: 10,
+  education: 5,
+};
 
 interface MainPageProps {
   onBack: () => void;
@@ -33,6 +39,7 @@ export default function MainPage({ onBack }: MainPageProps) {
   const [jobDescription, setJobDescription] = React.useState('');
   const [jobDescriptionFile, setJobDescriptionFile] = React.useState<File[]>([]);
   const [resumeFiles, setResumeFiles] = React.useState<File[]>([]);
+  const [weights, setWeights] = React.useState<MetricWeights>(DEFAULT_WEIGHTS);
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   
@@ -117,7 +124,7 @@ export default function MainPage({ onBack }: MainPageProps) {
 
     try {
       const resumes = await Promise.all(resumeFiles.map(fileToResume));
-      const result = await analyzeResumesAction(currentJobDescription, resumes, user.uid);
+      const result = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid);
       setAnalysisResult(result);
     } catch (e: any) {
       console.error(e);
@@ -218,9 +225,15 @@ export default function MainPage({ onBack }: MainPageProps) {
                 </CardContent>
             </Card>
 
+            <WeightSliders 
+              title="3. Assign Weights (Optional)"
+              weights={weights}
+              onWeightsChange={setWeights}
+            />
+
             <Card>
                 <CardHeader>
-                    <CardTitle>3. Start Analysis</CardTitle>
+                    <CardTitle>4. Start Analysis</CardTitle>
                     <CardDescription>Click the button to rank the resumes.</CardDescription>
                 </CardHeader>
                 <CardContent>

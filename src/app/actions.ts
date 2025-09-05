@@ -18,7 +18,7 @@ import {
 import {db} from '@/lib/firebase';
 import {collection, addDoc, serverTimestamp, getDocs, query, orderBy, limit} from 'firebase/firestore';
 
-import type { AnalysisResult, Resume } from '@/lib/types';
+import type { AnalysisResult, Resume, MetricWeights } from '@/lib/types';
 
 export type {
   RankResumesOutput,
@@ -29,6 +29,7 @@ export type {
 export async function analyzeResumesAction(
   jobDescription: string,
   resumes: Resume[],
+  weights: MetricWeights,
   userId: string
 ): Promise<AnalysisResult> {
   try {
@@ -39,7 +40,7 @@ export async function analyzeResumesAction(
       throw new Error('Please select at least one resume to analyze.');
     }
 
-    const rankPromise = rankResumesFlow({ jobDescription, resumes });
+    const rankPromise = rankResumesFlow({ jobDescription, resumes, weights });
 
     const detailPromises = resumes.map(async (resume) => {
       const skillsPromise = parseResumeSkillsFlow({ resumeText: resume.content });

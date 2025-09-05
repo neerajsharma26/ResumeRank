@@ -16,9 +16,16 @@ const ResumeSchema = z.object({
   content: z.string(),
 });
 
+const WeightSchema = z.object({
+  skills: z.number(),
+  experience: z.number(),
+  education: z.number(),
+});
+
 const RankResumesInputSchema = z.object({
   resumes: z.array(ResumeSchema).describe('An array of resumes to rank.'),
   jobDescription: z.string().describe('The job description to rank resumes against.'),
+  weights: WeightSchema.describe('Weights for different ranking criteria.'),
 });
 export type RankResumesInput = z.infer<typeof RankResumesInputSchema>;
 
@@ -42,6 +49,13 @@ const rankResumesPrompt = ai.definePrompt({
   prompt: `You are an expert HR assistant tasked with ranking resumes based on their relevance to a job description.
 
 Analyze each resume against the provided job description. Assign a score from 0 to 100, where 100 is a perfect match. Provide a concise highlight summary for each, noting key strengths and weaknesses.
+
+Consider the following weights when calculating the score:
+- Skills Match: {{weights.skills}}
+- Experience Relevance: {{weights.experience}}
+- Education Background: {{weights.education}}
+
+A higher weight means the factor is more important.
 
 Job Description:
 {{{jobDescription}}}
