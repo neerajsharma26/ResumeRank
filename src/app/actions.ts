@@ -16,6 +16,8 @@ import {
   MatchKeywordsToResumeInput,
   MatchKeywordsToResumeOutput,
 } from '@/ai/flows/match-keywords-to-resume';
+import {db} from '@/lib/firebase';
+import {collection, addDoc, serverTimestamp} from 'firebase/firestore';
 
 import type { AnalysisResult, Resume } from '@/lib/types';
 
@@ -27,7 +29,8 @@ export type {
 
 export async function analyzeResumesAction(
   jobDescription: string,
-  resumes: Resume[]
+  resumes: Resume[],
+  userId: string
 ): Promise<AnalysisResult> {
   try {
     if (!jobDescription.trim()) {
@@ -64,8 +67,19 @@ export async function analyzeResumesAction(
     
     // Sort rankedResumes by score descending
     const sortedRankedResumes = [...rankedResumes].sort((a, b) => b.score - a.score);
+    
+    const result: AnalysisResult = { rankedResumes: sortedRankedResumes, details };
 
-    return { rankedResumes: sortedRankedResumes, details };
+    // Store in Firestore
+    if (userId) {
+      await addDoc(collection(db, 'users', userId, 'analysisReports'), {
+        ...result,
+        jobDescription,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    return result;
   } catch (e: any) {
     console.error('Error in analyzeResumesAction:', e);
     // Re-throw the error to be caught by the client

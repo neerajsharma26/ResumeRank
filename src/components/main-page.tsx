@@ -5,6 +5,7 @@ import { analyzeResumesAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { AnalysisResult, Resume } from '@/lib/types';
 import { mockResumes } from '@/lib/mock-data';
+import { useAuth } from '@/hooks/use-auth';
 
 import Header from '@/components/layout/header';
 import ResumeSelector from '@/components/resume-selector';
@@ -21,6 +22,7 @@ export default function MainPage() {
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const handleAnalyze = async () => {
     if (!jobDescription.trim()) {
@@ -39,12 +41,20 @@ export default function MainPage() {
       });
       return;
     }
+    if (!user) {
+       toast({
+        variant: 'destructive',
+        title: 'Authentication Error',
+        description: 'You must be logged in to perform analysis.',
+      });
+      return;
+    }
 
     setIsLoading(true);
     setAnalysisResult(null);
 
     try {
-      const result = await analyzeResumesAction(jobDescription, selectedResumes);
+      const result = await analyzeResumesAction(jobDescription, selectedResumes, user.uid);
       setAnalysisResult(result);
     } catch (error: any) {
       toast({
@@ -63,7 +73,7 @@ export default function MainPage() {
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-4 xl:col-span-3">
-            <Card className="sticky top-8 shadow-md">
+            <Card className="sticky top-24 shadow-md">
               <CardHeader>
                 <CardTitle>Configuration</CardTitle>
                 <CardDescription>
