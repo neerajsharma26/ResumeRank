@@ -100,50 +100,6 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
       }
   }
 
-  const generateSummaryText = () => {
-    if (!result) return '';
-    let summary = `ResumeRank Analysis Summary\n`;
-    if(jobDescriptionName) {
-        summary += `Job Description: ${jobDescriptionName}\n`;
-    }
-    summary += `============================\n\n`;
-
-    result.rankedResumes.forEach((candidate) => {
-      summary += `CANDIDATE: ${candidate.filename}\n`;
-      summary += `-------------------------\n`;
-      summary += `Score: ${candidate.score}/100\n`;
-      summary += `AI Highlights: ${candidate.highlights}\n\n`;
-
-      const details = result.details[candidate.filename];
-      if (details) {
-        summary += `--- Detailed Analysis ---\n`;
-        summary += `Years of Experience: ${details.skills.experienceYears}\n`;
-        summary += `Skills: ${details.skills.skills.join(', ') || 'None'}\n`;
-        summary += `Certifications: ${details.skills.certifications.join(', ') || 'None'}\n\n`;
-        
-        summary += `Keyword Match Score: ${details.keywords.score}/100\n`;
-        summary += `Keyword Summary: ${details.keywords.summary}\n`;
-        summary += `Matched Keywords: ${details.keywords.matches.join(', ') || 'None'}\n`;
-        summary += `Missing Keywords: ${details.keywords.missing.join(', ') || 'None'}\n`;
-      }
-      summary += `\n============================\n\n`;
-    });
-    return summary;
-  };
-
-  const downloadSummary = () => {
-    const text = generateSummaryText();
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'resumerank_summary.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-  
   const escapeCsvCell = (cell: any) => {
     if (cell === null || cell === undefined) return '';
     const str = String(cell);
