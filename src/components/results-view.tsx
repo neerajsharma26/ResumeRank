@@ -15,6 +15,7 @@ interface ResultsViewProps {
   onCompare: (filenames: string[]) => void;
   onView: (filename: string) => void;
   jobDescriptionName?: string;
+  isViewingPastReport?: boolean;
 }
 
 const ResultSkeleton = () => (
@@ -51,7 +52,7 @@ const EmptyState = () => (
   </Card>
 );
 
-export default function ResultsView({ result, isLoading, onCompare, onView, jobDescriptionName }: ResultsViewProps) {
+export default function ResultsView({ result, isLoading, onCompare, onView, jobDescriptionName, isViewingPastReport = false }: ResultsViewProps) {
   const [selectedForCompare, setSelectedForCompare] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
@@ -174,7 +175,7 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
                         details={result.details[rankedResume.filename]}
                     />
                 </div>
-                 <Button variant="ghost" size="icon" onClick={() => onView(rankedResume.filename)}>
+                 <Button variant="ghost" size="icon" onClick={() => onView(rankedResume.filename)} disabled={isViewingPastReport}>
                     <ExternalLink className="h-5 w-5" />
                 </Button>
             </div>

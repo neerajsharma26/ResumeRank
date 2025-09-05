@@ -16,6 +16,7 @@ import { FileUpload } from './file-upload';
 import { ComparisonModal } from './comparison-modal';
 import { ResumeViewerModal } from './resume-viewer-modal';
 import { WeightSliders } from './weight-sliders';
+import type { Report } from '@/app/page';
 
 // Dynamically import pdfjs-dist only on the client side
 const pdfjsLibPromise = import('pdfjs-dist');
@@ -33,14 +34,15 @@ const DEFAULT_WEIGHTS: MetricWeights = {
 
 interface MainPageProps {
   onBack: () => void;
+  existingResult?: Report;
 }
 
-export default function MainPage({ onBack }: MainPageProps) {
-  const [jobDescription, setJobDescription] = React.useState('');
+export default function MainPage({ onBack, existingResult }: MainPageProps) {
+  const [jobDescription, setJobDescription] = React.useState(existingResult?.jobDescription || '');
   const [jobDescriptionFile, setJobDescriptionFile] = React.useState<File[]>([]);
   const [resumeFiles, setResumeFiles] = React.useState<File[]>([]);
   const [weights, setWeights] = React.useState<MetricWeights>(DEFAULT_WEIGHTS);
-  const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
+  const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(existingResult || null);
   const [isLoading, setIsLoading] = React.useState(false);
   
   const [isComparisonModalOpen, setIsComparisonModalOpen] = React.useState(false);
@@ -51,6 +53,8 @@ export default function MainPage({ onBack }: MainPageProps) {
 
   const { toast } = useToast();
   const { user } = useAuth();
+
+  const isViewingPastReport = !!existingResult;
   
   const fileToText = async (file: File): Promise<string> => {
     if (!pdfjsLib) {
@@ -155,7 +159,8 @@ export default function MainPage({ onBack }: MainPageProps) {
   };
 
   const currentResult = analysisResult?.rankedResumes[viewingIndex];
-  const currentFile = currentResult ? resumeFiles.find(f => f.name === currentResult.filename) || null : null;
+  // In a past report, we don't have the original File object, so currentFile will be null.
+  const currentFile = isViewingPastReport ? null : (currentResult ? resumeFiles.find(f => f.name === currentResult.filename) || null : null);
 
 
   return (
@@ -168,99 +173,105 @@ export default function MainPage({ onBack }: MainPageProps) {
                 Back to Dashboard
             </Button>
             <h1 className="text-4xl font-bold tracking-tight text-slate-900">
-              AI Resume Analysis
+             {isViewingPastReport ? 'Analysis Report' : 'AI Resume Analysis'}
             </h1>
             <p className="mt-2 text-lg text-slate-600">
-              Upload a job description and resumes to get an AI-powered analysis and ranking.
+              {isViewingPastReport
+                ? 'Reviewing a previously generated analysis report.'
+                : 'Upload a job description and resumes to get an AI-powered analysis and ranking.'
+              }
             </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          <div className="lg:col-span-1 flex flex-col gap-8">
-            <Card>
-                <CardHeader>
-                    <CardTitle>1. Job Description</CardTitle>
-                    <CardDescription>Upload a file or paste the text.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <FileUpload 
+          {!isViewingPastReport && (
+            <div className="lg:col-span-1 flex flex-col gap-8">
+              <Card>
+                  <CardHeader>
+                      <CardTitle>1. Job Description</CardTitle>
+                      <CardDescription>Upload a file or paste the text.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                      <FileUpload 
+                          title=""
+                          description=""
+                          onFilesChange={setJobDescriptionFile}
+                          acceptedFiles=".pdf,.txt"
+                          isMultiple={false}
+                          files={jobDescriptionFile}
+                          disabled={isLoading}
+                      />
+                      <div className="flex items-center">
+                        <div className="flex-grow border-t border-gray-300"></div>
+                        <span className="flex-shrink mx-4 text-gray-500 text-sm">OR</span>
+                        <div className="flex-grow border-t border-gray-300"></div>
+                      </div>
+                      <textarea
+                        value={jobDescription}
+                        onChange={(e) => setJobDescription(e.target.value)}
+                        placeholder="Paste job description here..."
+                        className="w-full p-2 border rounded-md min-h-[150px] text-sm"
+                        disabled={isLoading}
+                      />
+                  </CardContent>
+              </Card>
+
+              <Card>
+                  <CardHeader>
+                      <CardTitle>2. Upload Resumes</CardTitle>
+                      <CardDescription>Select up to 15 PDF or TXT files.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <FileUpload
                         title=""
                         description=""
-                        onFilesChange={setJobDescriptionFile}
+                        onFilesChange={setResumeFiles}
                         acceptedFiles=".pdf,.txt"
-                        isMultiple={false}
-                        files={jobDescriptionFile}
+                        isMultiple={true}
+                        files={resumeFiles}
                         disabled={isLoading}
-                    />
-                    <div className="flex items-center">
-                      <div className="flex-grow border-t border-gray-300"></div>
-                      <span className="flex-shrink mx-4 text-gray-500 text-sm">OR</span>
-                      <div className="flex-grow border-t border-gray-300"></div>
-                    </div>
-                    <textarea
-                      value={jobDescription}
-                      onChange={(e) => setJobDescription(e.target.value)}
-                      placeholder="Paste job description here..."
-                      className="w-full p-2 border rounded-md min-h-[150px] text-sm"
-                      disabled={isLoading}
-                    />
-                </CardContent>
-            </Card>
+                      />
+                  </CardContent>
+              </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>2. Upload Resumes</CardTitle>
-                    <CardDescription>Select up to 15 PDF or TXT files.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <FileUpload
-                      title=""
-                      description=""
-                      onFilesChange={setResumeFiles}
-                      acceptedFiles=".pdf,.txt"
-                      isMultiple={true}
-                      files={resumeFiles}
-                      disabled={isLoading}
-                    />
-                </CardContent>
-            </Card>
+              <WeightSliders 
+                weights={weights}
+                onWeightsChange={setWeights}
+                disabled={isLoading}
+              />
 
-            <WeightSliders 
-              title="3. Assign Weights (Optional)"
-              weights={weights}
-              onWeightsChange={setWeights}
-            />
+              <Card>
+                  <CardHeader>
+                      <CardTitle>3. Start Analysis</CardTitle>
+                      <CardDescription>Click the button to rank the resumes.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <Button onClick={handleAnalyze} disabled={isLoading || resumeFiles.length === 0} className="w-full" size="lg">
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            Analyzing...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="mr-2 h-5 w-5" />
+                            Rank Resumes
+                          </>
+                        )}
+                      </Button>
+                  </CardContent>
+              </Card>
+            </div>
+          )}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>4. Start Analysis</CardTitle>
-                    <CardDescription>Click the button to rank the resumes.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Button onClick={handleAnalyze} disabled={isLoading || resumeFiles.length === 0} className="w-full" size="lg">
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          Analyzing...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="mr-2 h-5 w-5" />
-                          Rank Resumes
-                        </>
-                      )}
-                    </Button>
-                </CardContent>
-            </Card>
-          </div>
-
-          <div className="lg:col-span-2">
+          <div className={isViewingPastReport ? 'lg:col-span-3' : 'lg:col-span-2'}>
             <ResultsView 
               result={analysisResult} 
               isLoading={isLoading} 
               onCompare={handleComparison}
               onView={handleView}
-              jobDescriptionName={jobDescriptionFile[0]?.name || (jobDescription ? "Pasted Text" : undefined)}
+              jobDescriptionName={jobDescriptionFile[0]?.name || (jobDescription ? (jobDescription.substring(0, 50) + (jobDescription.length > 50 ? '...' : '')) : undefined)}
+              isViewingPastReport={isViewingPastReport}
             />
           </div>
         </div>

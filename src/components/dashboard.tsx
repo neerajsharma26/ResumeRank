@@ -8,34 +8,35 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Loader2, PlusCircle, Inbox, AlertTriangle, FileText } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import Header from './layout/header';
+import type { Report } from '@/app/page';
 
-type Report = AnalysisResult & { id: string, jobDescription: string, createdAt: string };
-
-const ReportCard = ({ report }: { report: Report }) => (
-  <Card className="hover:shadow-lg transition-shadow">
-    <CardHeader>
-      <CardTitle className="text-lg flex items-center gap-2">
-        <FileText className="w-5 h-5 text-primary" />
-        <span className="truncate">{report.jobDescription}</span>
-      </CardTitle>
-      <CardDescription>
-        Analyzed {formatDistanceToNow(new Date(report.createdAt), { addSuffix: true })} • {report.rankedResumes.length} resumes
-      </CardDescription>
-    </CardHeader>
-    <CardContent>
-        <div className="flex justify-between items-center text-sm text-muted-foreground">
-            <span>Top Candidate:</span>
-            <span className="font-semibold text-foreground truncate">{report.rankedResumes[0]?.filename.replace(/_/g, ' ').replace('.txt', '')}</span>
-        </div>
-        <div className="flex justify-between items-center text-sm text-muted-foreground mt-1">
-            <span>Top Score:</span>
-            <span className="font-bold text-primary">{report.rankedResumes[0]?.score}</span>
-        </div>
-    </CardContent>
-  </Card>
+const ReportCard = ({ report, onViewReport }: { report: Report, onViewReport: (report: Report) => void }) => (
+  <button onClick={() => onViewReport(report)} className="text-left w-full">
+    <Card className="hover:shadow-lg transition-shadow h-full">
+        <CardHeader>
+        <CardTitle className="text-lg flex items-start gap-2">
+            <FileText className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+            <span className="line-clamp-2">{report.jobDescription}</span>
+        </CardTitle>
+        <CardDescription>
+            Analyzed {formatDistanceToNow(new Date(report.createdAt), { addSuffix: true })} • {report.rankedResumes.length} resumes
+        </CardDescription>
+        </CardHeader>
+        <CardContent>
+            <div className="flex justify-between items-center text-sm text-muted-foreground">
+                <span className="font-medium">Top Candidate:</span>
+                <span className="font-semibold text-foreground truncate pl-2">{report.rankedResumes[0]?.filename.replace(/_/g, ' ').replace('.txt', '')}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm text-muted-foreground mt-1">
+                <span className="font-medium">Top Score:</span>
+                <span className="font-bold text-primary">{report.rankedResumes[0]?.score}</span>
+            </div>
+        </CardContent>
+    </Card>
+  </button>
 );
 
-export default function Dashboard({ onNewAnalysis }: { onNewAnalysis: () => void }) {
+export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalysis: () => void, onViewReport: (report: Report) => void }) {
   const { user } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,7 +46,7 @@ export default function Dashboard({ onNewAnalysis }: { onNewAnalysis: () => void
     if (user?.uid) {
       setIsLoading(true);
       getAnalysisReports(user.uid)
-        .then(data => setReports(data))
+        .then(data => setReports(data as Report[]))
         .catch(err => setError(err.message || 'Failed to load reports.'))
         .finally(() => setIsLoading(false));
     }
@@ -93,7 +94,7 @@ export default function Dashboard({ onNewAnalysis }: { onNewAnalysis: () => void
           {!isLoading && !error && reports.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {reports.map(report => (
-                    <ReportCard key={report.id} report={report} />
+                    <ReportCard key={report.id} report={report} onViewReport={onViewReport} />
                 ))}
             </div>
           )}
