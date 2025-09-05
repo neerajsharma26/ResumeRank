@@ -37,16 +37,21 @@ const prompt = ai.definePrompt({
   name: 'parseResumeSkillsPrompt',
   input: {schema: ParseResumeSkillsInputSchema},
   output: {schema: ParseResumeSkillsOutputSchema},
-  prompt: `You are an expert HR assistant who is tasked with parsing resumes.
+  prompt: `You are an expert HR assistant parsing a resume.
 
-  Analyze the following resume text to extract skills, certifications, and total years of job experience.
+Analyze the following resume text and extract:
+1.  A list of technical and soft skills.
+2.  A list of any certifications mentioned.
+3.  The total years of professional job experience.
 
-  Resume Text:
-  {{{resumeText}}}
+Resume Text:
+{{{resumeText}}}
 
-  Output the skills, certifications, and total years of experience in the JSON format.
-  Do not make up any skills, certifications, or experience that is not explicitly mentioned in the resume.
-  If the resume does not contain years of job experince, set the value to 0.
+Provide the output in the specified JSON format.
+- If no skills are found, return an empty array for "skills".
+- If no certifications are found, return an empty array for "certifications".
+- If years of experience cannot be determined, set "experienceYears" to 0.
+- Do not invent information that is not present in the resume.
 `,
 });
 

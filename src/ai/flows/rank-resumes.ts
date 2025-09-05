@@ -24,8 +24,8 @@ export type RankResumesInput = z.infer<typeof RankResumesInputSchema>;
 
 const RankedResumeSchema = z.object({
   filename: z.string().describe('The filename of the resume.'),
-  score: z.number().describe('The relevance score of the resume to the job description.'),
-  highlights: z.string().describe('Key matches and areas of improvement.'),
+  score: z.number().describe('The relevance score (0-100) of the resume to the job description.'),
+  highlights: z.string().describe('A brief summary of key matches and areas of improvement for the resume.'),
 });
 
 const RankResumesOutputSchema = z.array(RankedResumeSchema);
@@ -39,7 +39,23 @@ const rankResumesPrompt = ai.definePrompt({
   name: 'rankResumesPrompt',
   input: {schema: RankResumesInputSchema},
   output: {schema: RankResumesOutputSchema},
-  prompt: `You are an expert HR assistant tasked with ranking resumes based on their relevance to a job description.\n\nFor each resume, analyze its content and compare it against the provided job description. Assign a score based on how well the resume matches the requirements and highlight key matches and areas of improvement.\n\nJob Description: {{jobDescription}}\n\nResumes:\n{{#each resumes}}\n---\nFilename: {{this.filename}}\nContent:\n{{this.content}}\n---\n{{/each}}\n\nRank the resumes and provide a score and highlights for each.\n\nOutput should be a JSON array of RankedResume objects, including filename, score and highlights for each resume.\n\nScoring is on a scale of 0 to 100, where 100 represents a perfect match.
+  prompt: `You are an expert HR assistant tasked with ranking resumes based on their relevance to a job description.
+
+Analyze each resume against the provided job description. Assign a score from 0 to 100, where 100 is a perfect match. Provide a concise highlight summary for each, noting key strengths and weaknesses.
+
+Job Description:
+{{{jobDescription}}}
+
+Resumes:
+{{#each resumes}}
+---
+Filename: {{this.filename}}
+Content:
+{{{this.content}}}
+---
+{{/each}}
+
+Return the ranked list as a JSON array of objects, each containing "filename", "score", and "highlights".
 `,
 });
 

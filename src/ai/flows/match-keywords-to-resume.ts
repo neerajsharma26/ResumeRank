@@ -27,8 +27,8 @@ const MatchKeywordsToResumeOutputSchema = z.object({
   missing: z
     .array(z.string())
     .describe('Keywords from the job description that are missing from the resume.'),
-  score: z.number().describe('A relevance score indicating how well the resume matches the job description.'),
-  summary: z.string().describe('A brief summary of how well the resume matches the job description'),
+  score: z.number().describe('A relevance score (0-100) indicating how well the resume keywords match the job description.'),
+  summary: z.string().describe('A brief summary of how well the resume matches the job description keywords.'),
 });
 export type MatchKeywordsToResumeOutput = z.infer<typeof MatchKeywordsToResumeOutputSchema>;
 
@@ -42,18 +42,19 @@ const prompt = ai.definePrompt({
   name: 'matchKeywordsToResumePrompt',
   input: {schema: MatchKeywordsToResumeInputSchema},
   output: {schema: MatchKeywordsToResumeOutputSchema},
-  prompt: `You are an expert HR assistant specializing in resume screening. Compare the resume content against the job description and provide the following:
+  prompt: `You are an expert HR assistant specializing in resume screening. First, identify the key skills and requirements from the job description. Then, compare the resume content against those keywords.
 
-- matches: Keywords from the job description that appear in the resume.
-- missing: Keywords from the job description that are missing from the resume.
-- score: A relevance score (0-100) indicating how well the resume matches the job description.
-- summary: A brief summary of how well the resume matches the job description, explaining the score.
+Provide the following in the specified JSON format:
+- matches: A list of keywords from the job description that are present in the resume.
+- missing: A list of keywords from the job description that are NOT found in the resume.
+- score: A relevance score (0-100) based on the proportion of matched keywords.
+- summary: A brief summary explaining the keyword match score.
 
 Resume:
-{{resumeText}}
+{{{resumeText}}}
 
 Job Description:
-{{jobDescription}}`,
+{{{jobDescription}}}`,
 });
 
 const matchKeywordsToResumeFlow = ai.defineFlow(
