@@ -235,6 +235,7 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
               </Card>
 
               <WeightSliders 
+                title="Analysis Weights"
                 weights={weights}
                 onWeightsChange={setWeights}
                 disabled={isLoading}
@@ -272,6 +273,7 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
               onView={handleView}
               jobDescriptionName={jobDescriptionFile[0]?.name || (jobDescription ? (jobDescription.substring(0, 50) + (jobDescription.length > 50 ? '...' : '')) : undefined)}
               isViewingPastReport={isViewingPastReport}
+              reportId={existingResult?.id}
             />
           </div>
         </div>

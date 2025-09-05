@@ -9,6 +9,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, Users, Columns, ExternalLink, FileText, Inbox } from 'lucide-react';
 import React from 'react';
+import { updateAnalysisReportStatus } from '@/app/actions';
+import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 
 interface ResultsViewProps {
   result: AnalysisResult | null;
@@ -17,6 +20,7 @@ interface ResultsViewProps {
   onView: (filename: string) => void;
   jobDescriptionName?: string;
   isViewingPastReport?: boolean;
+  reportId?: string;
 }
 
 type TabValue = 'all' | 'shortlisted' | 'rejected';
@@ -55,21 +59,17 @@ const EmptyState = ({isFiltered = false}: {isFiltered?: boolean}) => (
   </Card>
 );
 
-export default function ResultsView({ result, isLoading, onCompare, onView, jobDescriptionName, isViewingPastReport = false }: ResultsViewProps) {
+export default function ResultsView({ result, isLoading, onCompare, onView, jobDescriptionName, isViewingPastReport = false, reportId }: ResultsViewProps) {
   const [selectedForCompare, setSelectedForCompare] = React.useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = React.useState<TabValue>('all');
   const [candidateStatuses, setCandidateStatuses] = React.useState<Record<string, CandidateStatus>>({});
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   React.useEffect(() => {
-    // Clear selection when results change
     setSelectedForCompare(new Set());
-    // Initialize statuses
     if (result) {
-        const initialStatuses = result.rankedResumes.reduce((acc, r) => {
-            acc[r.filename] = 'none';
-            return acc;
-        }, {} as Record<string, CandidateStatus>);
-        setCandidateStatuses(initialStatuses);
+        setCandidateStatuses(result.statuses || {});
     }
   }, [result]);
 
@@ -85,8 +85,19 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
     setSelectedForCompare(newSelectionSet);
   };
   
-  const handleStatusChange = (filename: string, status: CandidateStatus) => {
-      setCandidateStatuses(prev => ({ ...prev, [filename]: status }));
+  const handleStatusChange = async (filename: string, status: CandidateStatus) => {
+      const newStatuses = { ...candidateStatuses, [filename]: status };
+      setCandidateStatuses(newStatuses);
+
+      if (reportId && user?.uid) {
+          try {
+              await updateAnalysisReportStatus(user.uid, reportId, newStatuses);
+          } catch(e: any) {
+              toast({ title: 'Error Saving Status', description: e.message, variant: 'destructive' });
+              // Revert state if API call fails
+              setCandidateStatuses(candidateStatuses);
+          }
+      }
   }
 
   const generateSummaryText = () => {
@@ -142,20 +153,21 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
     return str;
   };
 
-  const generateCSV = () => {
-      if (!result) return '';
+  const generateCSV = (candidatesToExport: AnalysisResult['rankedResumes']) => {
+      if (!result || candidatesToExport.length === 0) return '';
       const headers = [
           'Rank', 'Filename', 'Score', 'Status', 'Highlights', 
           'Years of Experience', 'Skills', 'Certifications',
           'Keyword Score', 'Keyword Summary', 'Matched Keywords', 'Missing Keywords'
       ];
       
-      const rows = result.rankedResumes.map((candidate, index) => {
+      const rows = candidatesToExport.map((candidate) => {
           const details = result.details[candidate.filename];
           const status = candidateStatuses[candidate.filename] || 'none';
+          const originalRank = result.rankedResumes.findIndex(r => r.filename === candidate.filename) + 1;
           
           return [
-              index + 1,
+              originalRank,
               candidate.filename,
               candidate.score,
               status,
@@ -174,12 +186,14 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
   };
   
   const downloadCSV = () => {
-      const csv = generateCSV();
+      if (!result) return;
+      const selectedResumes = result.rankedResumes.filter(r => selectedForCompare.has(r.filename));
+      const csv = generateCSV(selectedResumes);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'resumerank_analysis.csv';
+      a.download = 'resumerank_selection.csv';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -193,6 +207,7 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
   }, [result, activeTab, candidateStatuses]);
 
   const canCompare = selectedForCompare.size >= 2 && selectedForCompare.size <= 3;
+  const canDownload = selectedForCompare.size > 0;
 
   return (
     <div className="space-y-6">
@@ -214,13 +229,9 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
                     <Columns className="mr-2 h-4 w-4" />
                     Compare ({selectedForCompare.size})
                 </Button>
-                <Button variant="outline" onClick={downloadCSV}>
+                <Button variant="outline" onClick={downloadCSV} disabled={!canDownload}>
                     <Download className="mr-2 h-4 w-4" />
-                    Download CSV
-                </Button>
-                <Button variant="outline" onClick={downloadSummary}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Summary
+                    Download CSV ({selectedForCompare.size})
                 </Button>
             </div>
             )}
@@ -251,7 +262,7 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
 
             {!isLoading && result && filteredResumes.length > 0 && (
                 <div className="space-y-4">
-                {filteredResumes.map((rankedResume, index) => (
+                {filteredResumes.map((rankedResume) => (
                     <div key={rankedResume.filename} className="flex items-center gap-4">
                         <Checkbox
                             id={`compare-${rankedResume.filename}`}
@@ -261,7 +272,7 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
                         />
                         <div className="flex-1">
                             <CandidateCard
-                                rank={index + 1}
+                                rank={result.rankedResumes.findIndex(r => r.filename === rankedResume.filename) + 1}
                                 rankedResume={rankedResume}
                                 details={result.details[rankedResume.filename]}
                                 status={candidateStatuses[rankedResume.filename] || 'none'}

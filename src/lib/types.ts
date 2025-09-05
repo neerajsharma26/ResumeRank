@@ -21,6 +21,7 @@ export type AnalysisDetails = {
 export type AnalysisResult = {
   rankedResumes: RankResumesOutput;
   details: AnalysisDetails;
+  statuses: Record<string, CandidateStatus>;
 };
 
 export interface MetricWeights {
