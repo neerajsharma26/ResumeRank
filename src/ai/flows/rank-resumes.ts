@@ -1,0 +1,56 @@
+'use server';
+
+/**
+ * @fileOverview Ranks resumes based on relevance to a job description.
+ *
+ * - rankResumes - A function that takes resumes and a job description, and returns a ranked list of resumes with scores and highlights.
+ * - RankResumesInput - The input type for the rankResumes function.
+ * - RankResumesOutput - The return type for the rankResumes function.
+ */
+
+import {ai} from '@/ai/genkit';
+import {z} from 'genkit';
+
+const ResumeSchema = z.object({
+  filename: z.string(),
+  content: z.string(),
+});
+
+const RankResumesInputSchema = z.object({
+  resumes: z.array(ResumeSchema).describe('An array of resumes to rank.'),
+  jobDescription: z.string().describe('The job description to rank resumes against.'),
+});
+export type RankResumesInput = z.infer<typeof RankResumesInputSchema>;
+
+const RankedResumeSchema = z.object({
+  filename: z.string().describe('The filename of the resume.'),
+  score: z.number().describe('The relevance score of the resume to the job description.'),
+  highlights: z.string().describe('Key matches and areas of improvement.'),
+});
+
+const RankResumesOutputSchema = z.array(RankedResumeSchema);
+export type RankResumesOutput = z.infer<typeof RankResumesOutputSchema>;
+
+export async function rankResumes(input: RankResumesInput): Promise<RankResumesOutput> {
+  return rankResumesFlow(input);
+}
+
+const rankResumesPrompt = ai.definePrompt({
+  name: 'rankResumesPrompt',
+  input: {schema: RankResumesInputSchema},
+  output: {schema: RankResumesOutputSchema},
+  prompt: `You are an expert HR assistant tasked with ranking resumes based on their relevance to a job description.\n\nFor each resume, analyze its content and compare it against the provided job description. Assign a score based on how well the resume matches the requirements and highlight key matches and areas of improvement.\n\nJob Description: {{{jobDescription}}}\n\nResumes:\n{{#each resumes}}\nFilename: {{{this.filename}}}\nContent: {{{this.content}}}\n{{/each}}\n\nRank the resumes and provide a score and highlights for each.\n\nOutput should be a JSON array of RankedResume objects, including filename, score and highlights for each resume.\n\nScoring is on a scale of 0 to 100, where 100 represents a perfect match.
+`,
+});
+
+const rankResumesFlow = ai.defineFlow(
+  {
+    name: 'rankResumesFlow',
+    inputSchema: RankResumesInputSchema,
+    outputSchema: RankResumesOutputSchema,
+  },
+  async input => {
+    const {output} = await rankResumesPrompt(input);
+    return output!;
+  }
+);
