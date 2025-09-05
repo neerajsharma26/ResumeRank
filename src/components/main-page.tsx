@@ -69,21 +69,14 @@ export default function MainPage() {
       });
       return;
     }
-    if (!user) {
-       toast({
-        variant: 'destructive',
-        title: 'Authentication Error',
-        description: 'You must be logged in to perform analysis.',
-      });
-      return;
-    }
 
     setIsLoading(true);
     setAnalysisResult(null);
 
     try {
       const resumes = await Promise.all(resumeFiles.map(fileToResume));
-      const result = await analyzeResumesAction(jobDescription, resumes, user.uid);
+      // Pass a placeholder user ID to bypass auth for now.
+      const result = await analyzeResumesAction(jobDescription, resumes, user?.uid ?? 'guest-user');
       setAnalysisResult(result);
     } catch (error: any) {
       toast({
