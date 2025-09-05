@@ -1,15 +1,25 @@
 'use client';
 
-import {useRouter} from 'next/navigation';
-import {Button} from '@/components/ui/button';
-import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
-import {Rocket, Chrome} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Rocket, Chrome } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
+import { useEffect } from 'react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { user, signInWithGoogle, loading } = useAuth();
 
-  const handleSignIn = () => {
-    router.push('/');
+  useEffect(() => {
+    if (user) {
+      router.push('/');
+    }
+  }, [user, router]);
+
+
+  const handleSignIn = async () => {
+    await signInWithGoogle();
   };
 
   return (
@@ -26,10 +36,10 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col space-y-4">
-            <Button onClick={handleSignIn} className="w-full" size="lg">
+            <Button onClick={handleSignIn} className="w-full" size="lg" disabled={loading}>
               <>
                 <Chrome className="mr-2 h-5 w-5" />
-                Sign In with Google
+                {loading ? 'Signing In...' : 'Sign In with Google'}
               </>
             </Button>
           </div>

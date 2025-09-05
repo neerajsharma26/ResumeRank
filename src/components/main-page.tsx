@@ -53,6 +53,14 @@ export default function MainPage() {
   };
 
   const handleAnalyze = async () => {
+    if (!user) {
+       toast({
+        variant: 'destructive',
+        title: 'Authentication Error',
+        description: 'You must be signed in to analyze resumes.',
+      });
+      return;
+    }
     if (!jobDescription.trim()) {
       toast({
         variant: 'destructive',
@@ -75,8 +83,7 @@ export default function MainPage() {
 
     try {
       const resumes = await Promise.all(resumeFiles.map(fileToResume));
-      // Pass a placeholder user ID to bypass auth for now.
-      const result = await analyzeResumesAction(jobDescription, resumes, user?.uid ?? 'guest-user');
+      const result = await analyzeResumesAction(jobDescription, resumes, user.uid);
       setAnalysisResult(result);
     } catch (error: any) {
       toast({
