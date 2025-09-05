@@ -132,6 +132,59 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+  
+  const escapeCsvCell = (cell: any) => {
+    if (cell === null || cell === undefined) return '';
+    const str = String(cell);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const generateCSV = () => {
+      if (!result) return '';
+      const headers = [
+          'Rank', 'Filename', 'Score', 'Status', 'Highlights', 
+          'Years of Experience', 'Skills', 'Certifications',
+          'Keyword Score', 'Keyword Summary', 'Matched Keywords', 'Missing Keywords'
+      ];
+      
+      const rows = result.rankedResumes.map((candidate, index) => {
+          const details = result.details[candidate.filename];
+          const status = candidateStatuses[candidate.filename] || 'none';
+          
+          return [
+              index + 1,
+              candidate.filename,
+              candidate.score,
+              status,
+              candidate.highlights,
+              details?.skills?.experienceYears ?? 'N/A',
+              details?.skills?.skills.join('; ') ?? '',
+              details?.skills?.certifications.join('; ') ?? '',
+              details?.keywords?.score ?? 'N/A',
+              details?.keywords?.summary ?? '',
+              details?.keywords?.matches.join('; ') ?? '',
+              details?.keywords?.missing.join('; ') ?? '',
+          ].map(escapeCsvCell);
+      });
+      
+      return [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+  };
+  
+  const downloadCSV = () => {
+      const csv = generateCSV();
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'resumerank_analysis.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+  };
 
   const filteredResumes = React.useMemo(() => {
     if (!result) return [];
@@ -160,6 +213,10 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
                 >
                     <Columns className="mr-2 h-4 w-4" />
                     Compare ({selectedForCompare.size})
+                </Button>
+                <Button variant="outline" onClick={downloadCSV}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download CSV
                 </Button>
                 <Button variant="outline" onClick={downloadSummary}>
                     <Download className="mr-2 h-4 w-4" />
