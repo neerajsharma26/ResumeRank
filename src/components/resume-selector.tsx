@@ -46,7 +46,7 @@ export default function ResumeSelector({
             />
             <Label
               htmlFor={resume.filename}
-              className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+              className={`flex items-center gap-2 text-sm font-normal ${disabled ? 'cursor-not-allowed text-muted-foreground' : 'cursor-pointer'}`}
             >
               <FileText className="h-4 w-4 text-muted-foreground" />
               {resume.filename}

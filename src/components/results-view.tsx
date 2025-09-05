@@ -4,12 +4,16 @@ import type { AnalysisResult } from '@/lib/types';
 import CandidateCard from '@/components/candidate-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Users } from 'lucide-react';
+import { Download, Users, Columns, ExternalLink } from 'lucide-react';
+import React from 'react';
 
 interface ResultsViewProps {
   result: AnalysisResult | null;
   isLoading: boolean;
+  onCompare: (filenames: string[]) => void;
+  onView: (filename: string) => void;
 }
 
 const ResultSkeleton = () => (
@@ -46,7 +50,26 @@ const EmptyState = () => (
   </Card>
 );
 
-export default function ResultsView({ result, isLoading }: ResultsViewProps) {
+export default function ResultsView({ result, isLoading, onCompare, onView }: ResultsViewProps) {
+  const [selectedForCompare, setSelectedForCompare] = React.useState<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    // Clear selection when results change
+    setSelectedForCompare(new Set());
+  }, [result]);
+
+  const handleCompareSelect = (filename: string, isSelected: boolean) => {
+    const newSelectionSet = new Set(selectedForCompare);
+    if (isSelected) {
+      if (newSelectionSet.size < 3) {
+        newSelectionSet.add(filename);
+      }
+    } else {
+      newSelectionSet.delete(filename);
+    }
+    setSelectedForCompare(newSelectionSet);
+  };
+
   const generateSummaryText = () => {
     if (!result) return '';
     let summary = `ResumeRank Analysis Summary\n`;
@@ -88,15 +111,27 @@ export default function ResultsView({ result, isLoading }: ResultsViewProps) {
     URL.revokeObjectURL(url);
   };
 
+  const canCompare = selectedForCompare.size >= 2 && selectedForCompare.size <= 3;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Analysis Results</h2>
         {result && (
-          <Button variant="outline" onClick={downloadSummary}>
-            <Download className="mr-2 h-4 w-4" />
-            Download Summary
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => onCompare(Array.from(selectedForCompare))}
+              disabled={!canCompare}
+            >
+              <Columns className="mr-2 h-4 w-4" />
+              Compare ({selectedForCompare.size})
+            </Button>
+            <Button variant="outline" onClick={downloadSummary}>
+              <Download className="mr-2 h-4 w-4" />
+              Download Summary
+            </Button>
+          </div>
         )}
       </div>
 
@@ -107,12 +142,24 @@ export default function ResultsView({ result, isLoading }: ResultsViewProps) {
       {!isLoading && result && (
         <div className="space-y-4">
           {result.rankedResumes.map((rankedResume, index) => (
-            <CandidateCard
-              key={rankedResume.filename}
-              rank={index + 1}
-              rankedResume={rankedResume}
-              details={result.details[rankedResume.filename]}
-            />
+            <div key={rankedResume.filename} className="flex items-center gap-4">
+                <Checkbox
+                    id={`compare-${rankedResume.filename}`}
+                    checked={selectedForCompare.has(rankedResume.filename)}
+                    onCheckedChange={(checked) => handleCompareSelect(rankedResume.filename, !!checked)}
+                    disabled={selectedForCompare.size >= 3 && !selectedForCompare.has(rankedResume.filename)}
+                />
+                <div className="flex-1">
+                    <CandidateCard
+                        rank={index + 1}
+                        rankedResume={rankedResume}
+                        details={result.details[rankedResume.filename]}
+                    />
+                </div>
+                 <Button variant="ghost" size="icon" onClick={() => onView(rankedResume.filename)}>
+                    <ExternalLink className="h-5 w-5" />
+                </Button>
+            </div>
           ))}
         </div>
       )}
