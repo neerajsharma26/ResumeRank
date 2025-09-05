@@ -79,6 +79,7 @@ export async function analyzeResumesAction(
     if (userId) {
       const reportRef = await addDoc(collection(db, 'users', userId, 'analysisReports'), {
         jobDescription,
+        resumes: result.resumes,
         createdAt: serverTimestamp(),
       });
 
@@ -135,8 +136,9 @@ export async function getAnalysisReports(userId: string): Promise<(AnalysisResul
     
     const reports = querySnapshot.docs.map(doc => {
       const data = doc.data();
-      // Ensure statuses field exists, providing a default if it doesn't
-      const statuses = data.statuses || data.rankedResumes.reduce((acc: Record<string, CandidateStatus>, r: any) => {
+      const rankedResumes = data.rankedResumes || [];
+
+      const statuses = data.statuses || rankedResumes.reduce((acc: Record<string, CandidateStatus>, r: any) => {
         acc[r.filename] = 'none';
         return acc;
       }, {});
@@ -144,7 +146,7 @@ export async function getAnalysisReports(userId: string): Promise<(AnalysisResul
       return {
         id: doc.id,
         jobDescription: data.jobDescription,
-        rankedResumes: data.rankedResumes,
+        rankedResumes: rankedResumes,
         resumes: data.resumes || [],
         details: data.details,
         statuses: statuses,
