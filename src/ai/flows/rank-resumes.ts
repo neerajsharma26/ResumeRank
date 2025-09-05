@@ -39,7 +39,7 @@ const rankResumesPrompt = ai.definePrompt({
   name: 'rankResumesPrompt',
   input: {schema: RankResumesInputSchema},
   output: {schema: RankResumesOutputSchema},
-  prompt: `You are an expert HR assistant tasked with ranking resumes based on their relevance to a job description.\n\nFor each resume, analyze its content and compare it against the provided job description. Assign a score based on how well the resume matches the requirements and highlight key matches and areas of improvement.\n\nJob Description: {{{jobDescription}}}\n\nResumes:\n{{#each resumes}}\nFilename: {{{this.filename}}}\nContent: {{{this.content}}}\n{{/each}}\n\nRank the resumes and provide a score and highlights for each.\n\nOutput should be a JSON array of RankedResume objects, including filename, score and highlights for each resume.\n\nScoring is on a scale of 0 to 100, where 100 represents a perfect match.
+  prompt: `You are an expert HR assistant tasked with ranking resumes based on their relevance to a job description.\n\nFor each resume, analyze its content and compare it against the provided job description. Assign a score based on how well the resume matches the requirements and highlight key matches and areas of improvement.\n\nJob Description: {{jobDescription}}\n\nResumes:\n{{#each resumes}}\n---\nFilename: {{this.filename}}\nContent:\n{{this.content}}\n---\n{{/each}}\n\nRank the resumes and provide a score and highlights for each.\n\nOutput should be a JSON array of RankedResume objects, including filename, score and highlights for each resume.\n\nScoring is on a scale of 0 to 100, where 100 represents a perfect match.
 `,
 });
 

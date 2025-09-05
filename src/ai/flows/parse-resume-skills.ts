@@ -42,7 +42,7 @@ const prompt = ai.definePrompt({
   Analyze the following resume text to extract skills, certifications, and total years of job experience.
 
   Resume Text:
-  {{resumeText}}
+  {{{resumeText}}}
 
   Output the skills, certifications, and total years of experience in the JSON format.
   Do not make up any skills, certifications, or experience that is not explicitly mentioned in the resume.
