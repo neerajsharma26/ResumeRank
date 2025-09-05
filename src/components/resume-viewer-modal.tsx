@@ -212,7 +212,7 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
                             <div className="mt-6 text-center border-t pt-4">
                                  <button onClick={handleDownload} className="inline-flex w-full justify-center items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
                                     <DownloadIcon /><span>Download Original</span>
-                                </button>
+                                 </button>
                             </div>
                         </div>
                     </div>
