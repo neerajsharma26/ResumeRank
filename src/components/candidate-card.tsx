@@ -24,14 +24,18 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import type { AnalysisDetails } from '@/lib/types';
 import type { RankResumesOutput } from '@/app/actions';
-import { Award, Briefcase, ChevronDown, Star, Tag, MoreVertical, CheckCircle, XCircle } from 'lucide-react';
+import { Award, Briefcase, ChevronDown, Star, Tag, MoreVertical, CheckCircle, XCircle, Undo } from 'lucide-react';
 import { Button } from './ui/button';
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 interface CandidateCardProps {
   rank: number;
   rankedResume: RankResumesOutput[0];
   details: AnalysisDetails[string];
 }
+
+type Status = 'none' | 'shortlisted' | 'rejected';
 
 const getRankColor = (rank: number) => {
   if (rank === 1) return 'bg-yellow-400 text-yellow-900';
@@ -45,12 +49,20 @@ export default function CandidateCard({
   rankedResume,
   details,
 }: CandidateCardProps) {
+  const [status, setStatus] = useState<Status>('none');
+
   const scoreColor =
     rankedResume.score > 80
       ? 'bg-green-500'
       : rankedResume.score > 60
       ? 'bg-yellow-500'
       : 'bg-red-500';
+  
+  const statusConfig = {
+    none: { text: 'Actions', className: '' },
+    shortlisted: { text: 'Shortlisted', className: 'bg-green-100 text-green-800 hover:bg-green-200 border-green-200' },
+    rejected: { text: 'Rejected', className: 'bg-red-100 text-red-800 hover:bg-red-200 border-red-200' },
+  }
 
   return (
     <Card className="transition-all hover:shadow-lg">
@@ -77,19 +89,28 @@ export default function CandidateCard({
              <p className="text-xs text-muted-foreground">Relevance Score</p>
              <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="w-full">
-                  Actions <MoreVertical className="w-4 h-4 ml-2" />
+                 <Button variant="outline" size="sm" className={cn("w-full", statusConfig[status].className)}>
+                  {statusConfig[status].text} <MoreVertical className="w-4 h-4 ml-2" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setStatus('shortlisted')}>
                   <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
                   <span>Shortlist</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setStatus('rejected')}>
                   <XCircle className="mr-2 h-4 w-4 text-red-500" />
                   <span>Reject</span>
                 </DropdownMenuItem>
+                 {status !== 'none' && (
+                  <>
+                    <Separator className="my-1" />
+                    <DropdownMenuItem onClick={() => setStatus('none')}>
+                      <Undo className="mr-2 h-4 w-4" />
+                      <span>Reset Status</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
