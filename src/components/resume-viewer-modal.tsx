@@ -5,7 +5,7 @@ import { XMarkIcon, ArrowLeftIcon, ArrowRightIcon, ArrowsPointingOutIcon, Downlo
 import type { AnalysisResult } from '@/lib/types';
 
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.5.136/build/pdf.worker.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
 
 interface ResumeViewerModalProps {
   isOpen: boolean;

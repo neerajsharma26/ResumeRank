@@ -17,7 +17,7 @@ import { WeightSliders, DEFAULT_WEIGHTS, MetricWeights } from './weight-sliders'
 import { ComparisonModal } from './comparison-modal';
 import { ResumeViewerModal } from './resume-viewer-modal';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.5.136/build/pdf.worker.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
 
 interface MainPageProps {
   onBack: () => void;
@@ -73,28 +73,32 @@ export default function MainPage({ onBack }: MainPageProps) {
   };
 
   const handleAnalyze = async () => {
-    if (!user) {
-       toast({
-        variant: 'destructive',
-        title: 'Authentication Error',
-        description: 'You must be signed in to analyze resumes.',
-      });
-      return;
-    }
-    if (jobDescriptionFile.length === 0) {
+    if (!user?.uid) {
       toast({
+        title: 'Authentication Required',
+        description: 'Please sign in to analyze resumes.',
         variant: 'destructive',
-        title: 'Error',
-        description: 'Please upload a job description.',
       });
       return;
     }
+
     if (resumeFiles.length === 0) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Please upload at least one resume.',
-      });
+      toast({ title: 'No Resumes', description: 'Please upload at least one resume.', variant: 'destructive' });
+      return;
+    }
+    
+    let currentJobDescription = jobDescription;
+    if (jobDescriptionFile.length > 0) {
+      try {
+        currentJobDescription = await fileToText(jobDescriptionFile[0]);
+      } catch (error) {
+        toast({ title: 'Error Reading Job Description', description: 'Could not read the provided file.', variant: 'destructive' });
+        return;
+      }
+    }
+    
+    if (!currentJobDescription.trim()) {
+      toast({ title: 'No Job Description', description: 'Please type or upload a job description.', variant: 'destructive' });
       return;
     }
 
@@ -102,108 +106,144 @@ export default function MainPage({ onBack }: MainPageProps) {
     setAnalysisResult(null);
 
     try {
-      const jdText = await fileToText(jobDescriptionFile[0]);
-      setJobDescription(jobDescriptionFile[0].name);
-
       const resumes = await Promise.all(resumeFiles.map(fileToResume));
-      const result = await analyzeResumesAction(jdText, resumes, user.uid);
+      const result = await analyzeResumesAction(currentJobDescription, resumes, user.uid);
       setAnalysisResult(result);
-    } catch (error: any) {
+    } catch (e: any) {
+      console.error(e);
       toast({
-        variant: 'destructive',
         title: 'Analysis Failed',
-        description: error.message || 'An unknown error occurred.',
+        description: e.message || 'An unexpected error occurred.',
+        variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
     }
   };
-
-  const handleCompare = (filenames: string[]) => {
-      if (!analysisResult) return;
-      const selected = analysisResult.rankedResumes.filter(r => filenames.includes(r.filename));
-      setComparisonResults(selected);
-      setIsComparisonModalOpen(true);
-  }
-
+  
+  const handleComparison = (filenames: string[]) => {
+    if (!analysisResult) return;
+    const selectedResults = analysisResult.rankedResumes.filter(r => filenames.includes(r.filename));
+    setComparisonResults(selectedResults);
+    setIsComparisonModalOpen(true);
+  };
+  
   const handleView = (filename: string) => {
     if (!analysisResult) return;
     const index = analysisResult.rankedResumes.findIndex(r => r.filename === filename);
-    if(index > -1) {
-        setViewingIndex(index);
-        setIsViewerOpen(true);
+    if(index !== -1) {
+      setViewingIndex(index);
+      setIsViewerOpen(true);
     }
-  }
+  };
 
-  const viewingResult = analysisResult?.rankedResumes[viewingIndex];
-  const viewingDetails = viewingResult ? analysisResult?.details[viewingResult.filename] : null;
-  const viewingFile = viewingResult ? resumeFiles.find(f => f.name === viewingResult.filename) ?? null : null;
+  const currentResult = analysisResult?.rankedResumes[viewingIndex];
+  const currentFile = currentResult ? resumeFiles.find(f => f.name === currentResult.filename) || null : null;
+
 
   return (
-    <>
-      <div className="flex flex-col min-h-screen bg-background">
-        <Header />
-        <main className="flex-1 p-4 sm:p-6 md:p-8">
-          <div className="max-w-7xl mx-auto">
-             <Button variant="outline" onClick={onBack} className="mb-6">
+    <div className="flex flex-col min-h-screen bg-slate-50">
+      <Header />
+      <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-8">
+        <div className="mb-8">
+            <Button variant="ghost" onClick={onBack} className="mb-4">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to Dashboard
             </Button>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div className="lg:col-span-4 xl:col-span-3">
-                    <div className="space-y-6 sticky top-24">
-                        <FileUpload
-                          title="Upload Job Description"
-                          description="Select one PDF or TXT file."
-                          files={jobDescriptionFile}
-                          onFilesChange={setJobDescriptionFile}
-                          acceptedFiles=".pdf,.txt"
-                          isMultiple={false}
-                          disabled={isLoading}
-                        />
+            <h1 className="text-4xl font-bold tracking-tight text-slate-900">
+              AI Resume Analysis
+            </h1>
+            <p className="mt-2 text-lg text-slate-600">
+              Upload a job description and resumes to get an AI-powered analysis and ranking.
+            </p>
+        </div>
 
-                        <FileUpload
-                            title="Upload Resumes"
-                            description="Select up to 15 resumes to analyze."
-                            files={resumeFiles}
-                            onFilesChange={setResumeFiles}
-                            acceptedFiles=".pdf,.doc,.docx,.txt"
-                            isMultiple={true}
-                            disabled={isLoading}
-                        />
-
-                        <WeightSliders title="Adjust Scoring" weights={weights} onWeightsChange={setWeights} />
-
-                        <Button
-                        onClick={handleAnalyze}
-                        disabled={isLoading || resumeFiles.length === 0 || jobDescriptionFile.length === 0}
-                        className="w-full bg-accent hover:bg-accent/90 text-accent-foreground font-semibold"
-                        size="lg"
-                        >
-                        {isLoading ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                            <Sparkles className="mr-2 h-4 w-4" />
-                        )}
-                        {isLoading ? 'Analyzing...' : `Rank ${resumeFiles.length} Resumes`}
-                        </Button>
-                    </div>
-                </div>
-
-                <div className="lg:col-span-8 xl:col-span-9">
-                  <ResultsView 
-                    result={analysisResult} 
-                    isLoading={isLoading} 
-                    onCompare={handleCompare}
-                    onView={handleView}
-                    jobDescriptionName={jobDescription}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          <div className="lg:col-span-1 flex flex-col gap-8">
+            <Card>
+                <CardHeader>
+                    <CardTitle>1. Job Description</CardTitle>
+                    <CardDescription>Upload a file or paste the text.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <FileUpload 
+                        title=""
+                        description=""
+                        onFilesChange={setJobDescriptionFile}
+                        acceptedFiles=".pdf,.txt"
+                        isMultiple={false}
+                        files={jobDescriptionFile}
+                        disabled={isLoading}
                     />
-                </div>
-            </div>
+                    <div className="flex items-center">
+                      <div className="flex-grow border-t border-gray-300"></div>
+                      <span className="flex-shrink mx-4 text-gray-500 text-sm">OR</span>
+                      <div className="flex-grow border-t border-gray-300"></div>
+                    </div>
+                    <textarea
+                      value={jobDescription}
+                      onChange={(e) => setJobDescription(e.target.value)}
+                      placeholder="Paste job description here..."
+                      className="w-full p-2 border rounded-md min-h-[150px] text-sm"
+                      disabled={isLoading}
+                    />
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>2. Upload Resumes</CardTitle>
+                    <CardDescription>Select up to 15 PDF or TXT files.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <FileUpload
+                      title=""
+                      description=""
+                      onFilesChange={setResumeFiles}
+                      acceptedFiles=".pdf,.txt"
+                      isMultiple={true}
+                      files={resumeFiles}
+                      disabled={isLoading}
+                    />
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>3. Start Analysis</CardTitle>
+                    <CardDescription>Click the button to rank the resumes.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Button onClick={handleAnalyze} disabled={isLoading || resumeFiles.length === 0} className="w-full" size="lg">
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="mr-2 h-5 w-5" />
+                          Rank Resumes
+                        </>
+                      )}
+                    </Button>
+                </CardContent>
+            </Card>
           </div>
-        </main>
-      </div>
-      {analysisResult && (
+
+          <div className="lg:col-span-2">
+            <ResultsView 
+              result={analysisResult} 
+              isLoading={isLoading} 
+              onCompare={handleComparison}
+              onView={handleView}
+              jobDescriptionName={jobDescriptionFile[0]?.name || (jobDescription ? "Pasted Text" : undefined)}
+            />
+          </div>
+        </div>
+      </main>
+
+      {analysisResult && isComparisonModalOpen && (
         <ComparisonModal 
             isOpen={isComparisonModalOpen}
             onClose={() => setIsComparisonModalOpen(false)}
@@ -211,19 +251,20 @@ export default function MainPage({ onBack }: MainPageProps) {
             details={analysisResult.details}
         />
       )}
-      {isViewerOpen && viewingResult && viewingDetails && (
+      
+      {analysisResult && isViewerOpen && currentResult && (
          <ResumeViewerModal
             isOpen={isViewerOpen}
             onClose={() => setIsViewerOpen(false)}
-            result={viewingResult}
-            details={viewingDetails}
-            file={viewingFile}
-            onNext={() => setViewingIndex(i => Math.min(i + 1, (analysisResult?.rankedResumes.length ?? 0) -1))}
-            onPrev={() => setViewingIndex(i => Math.max(i - 1, 0))}
-            hasNext={viewingIndex < (analysisResult?.rankedResumes.length ?? 0) - 1}
+            result={currentResult}
+            details={analysisResult.details[currentResult.filename]}
+            file={currentFile}
+            onNext={() => setViewingIndex(i => (i + 1) % analysisResult.rankedResumes.length)}
+            onPrev={() => setViewingIndex(i => (i - 1 + analysisResult.rankedResumes.length) % analysisResult.rankedResumes.length)}
+            hasNext={viewingIndex < analysisResult.rankedResumes.length - 1}
             hasPrev={viewingIndex > 0}
-         />
+        />
       )}
-    </>
+    </div>
   );
 }
