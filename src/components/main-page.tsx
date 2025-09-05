@@ -5,7 +5,7 @@ import { analyzeResumesAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { AnalysisResult, Resume } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import * as pdfjsLib from 'pdfjs-dist';
+import type * as PdfJs from 'pdfjs-dist';
 
 import Header from '@/components/layout/header';
 import ResultsView from '@/components/results-view';
@@ -13,11 +13,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Loader2, Sparkles, ArrowLeft } from 'lucide-react';
 import { FileUpload } from './file-upload';
-import { WeightSliders, DEFAULT_WEIGHTS, MetricWeights } from './weight-sliders';
 import { ComparisonModal } from './comparison-modal';
 import { ResumeViewerModal } from './resume-viewer-modal';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+// Dynamically import pdfjs-dist only on the client side
+const pdfjsLibPromise = import('pdfjs-dist');
+let pdfjsLib: typeof PdfJs | null = null;
+pdfjsLibPromise.then(lib => {
+  pdfjsLib = lib;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+});
+
 
 interface MainPageProps {
   onBack: () => void;
@@ -29,7 +35,6 @@ export default function MainPage({ onBack }: MainPageProps) {
   const [resumeFiles, setResumeFiles] = React.useState<File[]>([]);
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
-  const [weights, setWeights] = React.useState<MetricWeights>(DEFAULT_WEIGHTS);
   
   const [isComparisonModalOpen, setIsComparisonModalOpen] = React.useState(false);
   const [comparisonResults, setComparisonResults] = React.useState<AnalysisResult['rankedResumes']>([]);
@@ -41,6 +46,11 @@ export default function MainPage({ onBack }: MainPageProps) {
   const { user } = useAuth();
   
   const fileToText = async (file: File): Promise<string> => {
+    if (!pdfjsLib) {
+      // Wait for the library to load
+      pdfjsLib = await pdfjsLibPromise;
+    }
+      
     if (file.type === 'application/pdf') {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;

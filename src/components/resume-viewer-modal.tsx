@@ -1,11 +1,17 @@
 'use client';
 import React, { useEffect, useState, useRef } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
+import type * as PdfJs from 'pdfjs-dist';
 import { XMarkIcon, ArrowLeftIcon, ArrowRightIcon, ArrowsPointingOutIcon, DownloadIcon } from './icons';
 import type { AnalysisResult } from '@/lib/types';
 
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+// pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+const pdfjsLibPromise = import('pdfjs-dist');
+let pdfjsLib: typeof PdfJs | null = null;
+pdfjsLibPromise.then(lib => {
+  pdfjsLib = lib;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+});
 
 interface ResumeViewerModalProps {
   isOpen: boolean;
@@ -32,7 +38,10 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ fileUrl, onDownload }) => {
     useEffect(() => {
         const renderPdf = async () => {
             try {
-                if (!fileUrl || !containerRef.current) return;
+                if (!pdfjsLib) {
+                    await pdfjsLibPromise;
+                }
+                if (!fileUrl || !containerRef.current || !pdfjsLib) return;
                 
                 setStatus('loading');
                 const container = containerRef.current;
