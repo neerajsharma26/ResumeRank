@@ -5,17 +5,19 @@ import { analyzeResumesAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { AnalysisResult, Resume } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
+import * as pdfjsLib from 'pdfjs-dist';
 
 import Header from '@/components/layout/header';
 import ResultsView from '@/components/results-view';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Sparkles, ArrowLeft } from 'lucide-react';
 import { FileUpload } from './file-upload';
 import { WeightSliders, DEFAULT_WEIGHTS, MetricWeights } from './weight-sliders';
 import { ComparisonModal } from './comparison-modal';
 import { ResumeViewerModal } from './resume-viewer-modal';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.5.136/build/pdf.worker.mjs`;
 
 interface MainPageProps {
   onBack: () => void;
@@ -23,6 +25,7 @@ interface MainPageProps {
 
 export default function MainPage({ onBack }: MainPageProps) {
   const [jobDescription, setJobDescription] = React.useState('');
+  const [jobDescriptionFile, setJobDescriptionFile] = React.useState<File[]>([]);
   const [resumeFiles, setResumeFiles] = React.useState<File[]>([]);
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -37,22 +40,36 @@ export default function MainPage({ onBack }: MainPageProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   
-  const fileToResume = (file: File): Promise<Resume> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target && typeof event.target.result === 'string') {
-          resolve({
-            filename: file.name,
-            content: event.target.result,
-          });
-        } else {
-          reject(new Error("Couldn't read file"));
-        }
-      };
-      reader.onerror = () => reject(new Error("Error reading file"));
-      reader.readAsText(file);
-    });
+  const fileToText = async (file: File): Promise<string> => {
+    if (file.type === 'application/pdf') {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+      let textContent = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const text = await page.getTextContent();
+        textContent += text.items.map(s => (s as any).str).join(' ');
+      }
+      return textContent;
+    } else {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target && typeof event.target.result === 'string') {
+            resolve(event.target.result);
+          } else {
+            reject(new Error("Couldn't read file"));
+          }
+        };
+        reader.onerror = () => reject(new Error("Error reading file"));
+        reader.readAsText(file);
+      });
+    }
+  };
+
+  const fileToResume = async (file: File): Promise<Resume> => {
+    const content = await fileToText(file);
+    return { filename: file.name, content };
   };
 
   const handleAnalyze = async () => {
@@ -64,11 +81,11 @@ export default function MainPage({ onBack }: MainPageProps) {
       });
       return;
     }
-    if (!jobDescription.trim()) {
+    if (jobDescriptionFile.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Please provide a job description.',
+        description: 'Please upload a job description.',
       });
       return;
     }
@@ -85,8 +102,11 @@ export default function MainPage({ onBack }: MainPageProps) {
     setAnalysisResult(null);
 
     try {
+      const jdText = await fileToText(jobDescriptionFile[0]);
+      setJobDescription(jobDescriptionFile[0].name);
+
       const resumes = await Promise.all(resumeFiles.map(fileToResume));
-      const result = await analyzeResumesAction(jobDescription, resumes, user.uid);
+      const result = await analyzeResumesAction(jdText, resumes, user.uid);
       setAnalysisResult(result);
     } catch (error: any) {
       toast({
@@ -133,6 +153,16 @@ export default function MainPage({ onBack }: MainPageProps) {
                 <div className="lg:col-span-4 xl:col-span-3">
                     <div className="space-y-6 sticky top-24">
                         <FileUpload
+                          title="Upload Job Description"
+                          description="Select one PDF or TXT file."
+                          files={jobDescriptionFile}
+                          onFilesChange={setJobDescriptionFile}
+                          acceptedFiles=".pdf,.txt"
+                          isMultiple={false}
+                          disabled={isLoading}
+                        />
+
+                        <FileUpload
                             title="Upload Resumes"
                             description="Select up to 15 resumes to analyze."
                             files={resumeFiles}
@@ -141,27 +171,12 @@ export default function MainPage({ onBack }: MainPageProps) {
                             isMultiple={true}
                             disabled={isLoading}
                         />
-                        <Card className="shadow-md">
-                            <CardHeader>
-                                <CardTitle>Job Description</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <Textarea
-                                    id="job-description"
-                                    placeholder="Paste the job description here..."
-                                    value={jobDescription}
-                                    onChange={(e) => setJobDescription(e.target.value)}
-                                    className="min-h-[150px] text-sm"
-                                    disabled={isLoading}
-                                />
-                            </CardContent>
-                        </Card>
 
                         <WeightSliders title="Adjust Scoring" weights={weights} onWeightsChange={setWeights} />
 
                         <Button
                         onClick={handleAnalyze}
-                        disabled={isLoading || resumeFiles.length === 0 || !jobDescription}
+                        disabled={isLoading || resumeFiles.length === 0 || jobDescriptionFile.length === 0}
                         className="w-full bg-accent hover:bg-accent/90 text-accent-foreground font-semibold"
                         size="lg"
                         >
@@ -181,6 +196,7 @@ export default function MainPage({ onBack }: MainPageProps) {
                     isLoading={isLoading} 
                     onCompare={handleCompare}
                     onView={handleView}
+                    jobDescriptionName={jobDescription}
                     />
                 </div>
             </div>

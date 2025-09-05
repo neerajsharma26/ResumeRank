@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Users, Columns, ExternalLink } from 'lucide-react';
+import { Download, Users, Columns, ExternalLink, FileText } from 'lucide-react';
 import React from 'react';
 
 interface ResultsViewProps {
@@ -14,6 +14,7 @@ interface ResultsViewProps {
   isLoading: boolean;
   onCompare: (filenames: string[]) => void;
   onView: (filename: string) => void;
+  jobDescriptionName?: string;
 }
 
 const ResultSkeleton = () => (
@@ -50,7 +51,7 @@ const EmptyState = () => (
   </Card>
 );
 
-export default function ResultsView({ result, isLoading, onCompare, onView }: ResultsViewProps) {
+export default function ResultsView({ result, isLoading, onCompare, onView, jobDescriptionName }: ResultsViewProps) {
   const [selectedForCompare, setSelectedForCompare] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
@@ -73,6 +74,9 @@ export default function ResultsView({ result, isLoading, onCompare, onView }: Re
   const generateSummaryText = () => {
     if (!result) return '';
     let summary = `ResumeRank Analysis Summary\n`;
+    if(jobDescriptionName) {
+        summary += `Job Description: ${jobDescriptionName}\n`;
+    }
     summary += `============================\n\n`;
 
     result.rankedResumes.forEach((candidate) => {
@@ -134,6 +138,20 @@ export default function ResultsView({ result, isLoading, onCompare, onView }: Re
           </div>
         )}
       </div>
+
+      {result && jobDescriptionName && (
+        <Card>
+            <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                    <FileText className="w-5 h-5 text-primary" />
+                    <div>
+                        <p className="text-sm font-medium text-muted-foreground">Job Description</p>
+                        <p className="font-semibold">{jobDescriptionName}</p>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+      )}
 
       {isLoading && <ResultSkeleton />}
 

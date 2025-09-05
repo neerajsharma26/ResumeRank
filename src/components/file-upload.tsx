@@ -77,7 +77,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
             <p className="mt-2 text-sm text-slate-600">
               <span className="font-semibold text-blue-600">Click to upload</span> or drag and drop
             </p>
-            <p className="text-xs text-slate-400 mt-1">PDF, DOC, DOCX, TXT (max 3MB)</p>
+            <p className="text-xs text-slate-400 mt-1">{isMultiple ? 'PDF, DOC, DOCX, TXT (max 3MB)' : 'PDF, TXT (max 3MB)'}</p>
         </div>
       </div>
       {files.length > 0 && (
