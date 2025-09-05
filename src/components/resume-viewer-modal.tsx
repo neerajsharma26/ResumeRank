@@ -154,7 +154,7 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
   const modalRef = useRef<HTMLDivElement>(null);
   const [fileUrl, setFileUrl] = useState('');
   
-  const isPdf = file?.type === 'application/pdf' || resumeUrl?.includes('.pdf');
+  const isPdf = file?.type === 'application/pdf' || (resumeUrl && new URL(resumeUrl).pathname.endsWith('.pdf'));
 
   useEffect(() => {
     if (file) {
@@ -211,7 +211,7 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
       </header>
 
       <main className="flex-grow bg-slate-200 flex items-center justify-center overflow-hidden">
-        {fileUrl && isPdf ? (
+        {isPdf ? (
             <PdfPreview fileUrl={fileUrl} onDownload={handleDownload} />
         ) : resumeContent ? (
             <TextView
