@@ -5,12 +5,13 @@ import { XMarkIcon, ArrowLeftIcon, ArrowRightIcon, ArrowsPointingOutIcon, Downlo
 import type { AnalysisResult } from '@/lib/types';
 
 
-// pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
 const pdfjsLibPromise = import('pdfjs-dist');
 let pdfjsLib: typeof PdfJs | null = null;
 pdfjsLibPromise.then(lib => {
   pdfjsLib = lib;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+  if (pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+  }
 });
 
 interface ResumeViewerModalProps {
@@ -24,6 +25,7 @@ interface ResumeViewerModalProps {
   details: AnalysisResult['details'][string];
   file: File | null;
   resumeContent?: string;
+  resumeUrl?: string;
 }
 
 interface PdfPreviewProps {
@@ -41,6 +43,9 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ fileUrl, onDownload }) => {
             try {
                 if (!pdfjsLib) {
                     pdfjsLib = await pdfjsLibPromise;
+                    if (pdfjsLib) {
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+                    }
                 }
                 if (!fileUrl || !containerRef.current || !pdfjsLib) return;
                 
@@ -144,22 +149,25 @@ const TextView: React.FC<{ content: string, title: string, score: number, highli
 
 
 export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
-  isOpen, onClose, onNext, onPrev, hasNext, hasPrev, result, details, file, resumeContent
+  isOpen, onClose, onNext, onPrev, hasNext, hasPrev, result, details, file, resumeContent, resumeUrl
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [fileUrl, setFileUrl] = useState('');
   
-  const canPreviewAsPdf = file?.type === 'application/pdf';
+  const isPdf = file?.type === 'application/pdf' || resumeUrl?.includes('.pdf');
 
   useEffect(() => {
     if (file) {
       const url = URL.createObjectURL(file);
       setFileUrl(url);
       return () => URL.revokeObjectURL(url);
-    } else {
+    } else if (resumeUrl) {
+      setFileUrl(resumeUrl);
+    }
+     else {
         setFileUrl('');
     }
-  }, [file]);
+  }, [file, resumeUrl]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -180,16 +188,17 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
   };
   
   const handleDownload = () => {
-    if(!file) return;
+    if(!fileUrl) return;
     const link = document.createElement('a');
     link.href = fileUrl;
-    link.download = file.name;
+    link.download = result.filename;
+    link.target = '_blank'; // Open in new tab to avoid issues
     link.click();
   };
 
   if (!isOpen) return null;
   
-  const hasFile = !!file;
+  const canDownload = !!file || !!resumeUrl;
 
   return (
     <div ref={modalRef} className="fixed inset-0 bg-black/75 z-50 flex flex-col p-4" role="dialog" aria-modal="true">
@@ -202,7 +211,7 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
       </header>
 
       <main className="flex-grow bg-slate-200 flex items-center justify-center overflow-hidden">
-        {hasFile && fileUrl && canPreviewAsPdf ? (
+        {fileUrl && isPdf ? (
             <PdfPreview fileUrl={fileUrl} onDownload={handleDownload} />
         ) : resumeContent ? (
             <TextView
@@ -210,8 +219,8 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
                 title={result.filename}
                 score={result.score}
                 highlights={result.highlights}
-                onDownload={hasFile ? handleDownload : undefined}
-                hasFile={hasFile}
+                onDownload={canDownload ? handleDownload : undefined}
+                hasFile={canDownload}
             />
         ) : (
           <div className="flex items-center justify-center h-full text-slate-600">

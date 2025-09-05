@@ -15,8 +15,9 @@ import {
   MatchKeywordsToResumeInput,
   MatchKeywordsToResumeOutput,
 } from '@/ai/flows/match-keywords-to-resume';
-import {db} from '@/lib/firebase';
+import {db, storage} from '@/lib/firebase';
 import {collection, addDoc, serverTimestamp, getDocs, query, orderBy, limit, doc, updateDoc} from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 import type { AnalysisResult, Resume, MetricWeights, CandidateStatus } from '@/lib/types';
 
@@ -30,7 +31,8 @@ export async function analyzeResumesAction(
   jobDescription: string,
   resumes: Resume[],
   weights: MetricWeights,
-  userId: string
+  userId: string,
+  files: { filename: string; data: ArrayBuffer }[]
 ): Promise<AnalysisResult> {
   try {
     if (!jobDescription.trim()) {
@@ -75,10 +77,24 @@ export async function analyzeResumesAction(
     const result: AnalysisResult = { rankedResumes: sortedRankedResumes, resumes, details, statuses };
 
     if (userId) {
-      await addDoc(collection(db, 'users', userId, 'analysisReports'), {
-        ...result,
+      const reportRef = await addDoc(collection(db, 'users', userId, 'analysisReports'), {
         jobDescription,
         createdAt: serverTimestamp(),
+      });
+
+      const uploadPromises = files.map(async (file) => {
+        const storageRef = ref(storage, `resumehire/${userId}/${reportRef.id}/${file.filename}`);
+        await uploadBytes(storageRef, file.data);
+        const downloadURL = await getDownloadURL(storageRef);
+        const resumeIndex = result.resumes.findIndex(r => r.filename === file.filename);
+        if (resumeIndex !== -1) {
+          result.resumes[resumeIndex].url = downloadURL;
+        }
+      });
+      await Promise.all(uploadPromises);
+      
+      await updateDoc(reportRef, {
+        ...result,
       });
     }
 

@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import type { MetricWeights } from '@/lib/types';
 
 interface WeightSlidersProps {
-  title: string;
   weights: MetricWeights;
   onWeightsChange: (weights: MetricWeights) => void;
   disabled?: boolean;
@@ -44,7 +43,7 @@ const WeightSlider: React.FC<{
 );
 
 
-export const WeightSliders: React.FC<WeightSlidersProps> = ({ title, weights, onWeightsChange, disabled }) => {
+export const WeightSliders: React.FC<WeightSlidersProps> = ({ weights, onWeightsChange, disabled }) => {
   const handleSliderChange = (metric: keyof MetricWeights) => (value: number[]) => {
     onWeightsChange({ ...weights, [metric]: value[0] });
   };
@@ -58,7 +57,7 @@ export const WeightSliders: React.FC<WeightSlidersProps> = ({ title, weights, on
       <CardHeader>
         <div className="flex justify-between items-center">
           <div>
-            <CardTitle>{title}</CardTitle>
+            <CardTitle>Analysis Weights</CardTitle>
             <CardDescription>Adjust the importance of each metric.</CardDescription>
           </div>
           <Button variant="ghost" onClick={resetToDefault} disabled={disabled}>Reset</Button>

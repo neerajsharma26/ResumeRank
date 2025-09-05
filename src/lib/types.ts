@@ -7,6 +7,7 @@ import type {
 export type Resume = {
   filename: string;
   content: string;
+  url?: string;
 };
 
 export type CandidateStatus = 'none' | 'shortlisted' | 'rejected';

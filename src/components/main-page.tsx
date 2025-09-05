@@ -18,12 +18,13 @@ import { ResumeViewerModal } from './resume-viewer-modal';
 import { WeightSliders } from './weight-sliders';
 import type { Report } from '@/app/page';
 
-// Dynamically import pdfjs-dist only on the client side
 const pdfjsLibPromise = import('pdfjs-dist');
 let pdfjsLib: typeof PdfJs | null = null;
 pdfjsLibPromise.then(lib => {
   pdfjsLib = lib;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+  if (pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+  }
 });
 
 const DEFAULT_WEIGHTS: MetricWeights = {
@@ -58,8 +59,10 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
   
   const fileToText = async (file: File): Promise<string> => {
     if (!pdfjsLib) {
-      // Wait for the library to load
       pdfjsLib = await pdfjsLibPromise;
+      if (pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
+      }
     }
       
     if (file.type === 'application/pdf') {
@@ -128,7 +131,13 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
 
     try {
       const resumes = await Promise.all(resumeFiles.map(fileToResume));
-      const result = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid);
+      const filesForUpload = await Promise.all(
+        resumeFiles.map(async (file) => ({
+          filename: file.name,
+          data: await file.arrayBuffer(),
+        }))
+      );
+      const result = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload);
       setAnalysisResult(result);
     } catch (e: any) {
       console.error(e);
@@ -158,10 +167,9 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
     }
   };
 
-  const currentResult = analysisResult?.rankedResumes[viewingIndex];
-  const currentResume = analysisResult?.resumes.find(r => r.filename === currentResult?.filename);
-  // In a past report, we don't have the original File object, so currentFile will be null.
-  const currentFile = isViewingPastReport ? null : (currentResult ? resumeFiles.find(f => f.name === currentResult.filename) || null : null);
+  const currentRankedResult = analysisResult?.rankedResumes[viewingIndex];
+  const currentResume = analysisResult?.resumes.find(r => r.filename === currentRankedResult?.filename);
+  const currentFile = isViewingPastReport ? null : (currentRankedResult ? resumeFiles.find(f => f.name === currentRankedResult.filename) || null : null);
 
 
   return (
@@ -236,7 +244,6 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
               </Card>
 
               <WeightSliders 
-                title="Analysis Weights"
                 weights={weights}
                 onWeightsChange={setWeights}
                 disabled={isLoading}
@@ -289,14 +296,15 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
         />
       )}
       
-      {analysisResult && isViewerOpen && currentResult && (
+      {analysisResult && isViewerOpen && currentRankedResult && (
          <ResumeViewerModal
             isOpen={isViewerOpen}
             onClose={() => setIsViewerOpen(false)}
-            result={currentResult}
-            details={analysisResult.details[currentResult.filename]}
+            result={currentRankedResult}
+            details={analysisResult.details[currentRankedResult.filename]}
             file={currentFile}
             resumeContent={currentResume?.content}
+            resumeUrl={currentResume?.url}
             onNext={() => setViewingIndex(i => (i + 1) % analysisResult.rankedResumes.length)}
             onPrev={() => setViewingIndex(i => (i - 1 + analysisResult.rankedResumes.length) % analysisResult.rankedResumes.length)}
             hasNext={viewingIndex < analysisResult.rankedResumes.length - 1}
