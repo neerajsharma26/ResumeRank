@@ -14,11 +14,18 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import type { AnalysisDetails, Resume } from '@/lib/types';
+import type { AnalysisDetails } from '@/lib/types';
 import type { RankResumesOutput } from '@/app/actions';
-import { Award, Briefcase, ChevronDown, FileText, Star, Tag } from 'lucide-react';
+import { Award, Briefcase, ChevronDown, Star, Tag, MoreVertical, CheckCircle, XCircle } from 'lucide-react';
+import { Button } from './ui/button';
 
 interface CandidateCardProps {
   rank: number;
@@ -62,12 +69,29 @@ export default function CandidateCard({
             </div>
             <CardDescription className="mt-2 text-sm">{rankedResume.highlights}</CardDescription>
           </div>
-          <div className="flex flex-col items-end space-y-1">
+          <div className="flex flex-col items-end space-y-2">
              <Badge variant={rankedResume.score > 75 ? "default" : "secondary"} className={`text-lg ${rankedResume.score > 75 ? "bg-primary text-primary-foreground": "bg-secondary"}`}>
                 {rankedResume.score}
                 <span className="text-xs ml-1 mt-1">/100</span>
              </Badge>
              <p className="text-xs text-muted-foreground">Relevance Score</p>
+             <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full">
+                  Actions <MoreVertical className="w-4 h-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem>
+                  <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
+                  <span>Shortlist</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <XCircle className="mr-2 h-4 w-4 text-red-500" />
+                  <span>Reject</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <div className="pt-2">
