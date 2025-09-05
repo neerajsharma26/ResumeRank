@@ -40,7 +40,7 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ fileUrl, onDownload }) => {
         const renderPdf = async () => {
             try {
                 if (!pdfjsLib) {
-                    await pdfjsLibPromise;
+                    pdfjsLib = await pdfjsLibPromise;
                 }
                 if (!fileUrl || !containerRef.current || !pdfjsLib) return;
                 
@@ -104,9 +104,41 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ fileUrl, onDownload }) => {
     );
 };
 
-const TextView: React.FC<{ content: string }> = ({ content }) => (
+const TextView: React.FC<{ content: string, title: string, score: number, highlights: string, onDownload?: () => void, hasFile: boolean }> = ({ content, title, score, highlights, onDownload, hasFile }) => (
     <div className="bg-white rounded-lg shadow-xl w-full h-full overflow-y-auto p-8 text-slate-800">
-        <pre className="whitespace-pre-wrap text-sm">{content}</pre>
+        <div className="flex justify-between items-start">
+            <div>
+                <h3 className="text-2xl font-bold text-slate-900">{title}</h3>
+            </div>
+            <div className="text-right flex-shrink-0 ml-4">
+                <p className="text-sm text-slate-500">Match Score</p>
+                <p className="text-2xl font-bold text-blue-600">{score} <span className="text-base font-normal">/ 100</span></p>
+            </div>
+        </div>
+
+        <div className="border-t my-6"></div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="md:col-span-2 space-y-8">
+                <div>
+                    <h4 className="text-lg font-semibold text-slate-800 mb-3">Resume Content</h4>
+                        <pre className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-4 rounded-md">{content || 'No content available.'}</pre>
+                </div>
+            </div>
+            <div className="md:col-span-1">
+                <div className="bg-slate-50 p-4 rounded-lg sticky top-6">
+                    <h4 className="text-base font-semibold text-slate-800 mb-3">AI Review</h4>
+                        <p className="text-sm text-slate-600 whitespace-pre-wrap">{highlights}</p>
+                        {hasFile && onDownload && (
+                        <div className="mt-6 text-center border-t pt-4">
+                                <button onClick={onDownload} className="inline-flex w-full justify-center items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
+                                <DownloadIcon /><span>Download Original</span>
+                                </button>
+                        </div>
+                        )}
+                </div>
+            </div>
+        </div>
     </div>
 );
 
@@ -116,16 +148,15 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [fileUrl, setFileUrl] = useState('');
-  const [canPreview, setCanPreview] = useState(false);
+  
+  const canPreviewAsPdf = file?.type === 'application/pdf';
 
   useEffect(() => {
     if (file) {
-      setCanPreview(file.type === 'application/pdf');
       const url = URL.createObjectURL(file);
       setFileUrl(url);
       return () => URL.revokeObjectURL(url);
     } else {
-        setCanPreview(false);
         setFileUrl('');
     }
   }, [file]);
@@ -171,46 +202,21 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
       </header>
 
       <main className="flex-grow bg-slate-200 flex items-center justify-center overflow-hidden">
-        {hasFile && fileUrl && canPreview ? (
+        {hasFile && fileUrl && canPreviewAsPdf ? (
             <PdfPreview fileUrl={fileUrl} onDownload={handleDownload} />
         ) : resumeContent ? (
-            <div className="bg-white rounded-lg shadow-xl w-full h-full overflow-y-auto p-8 text-slate-800">
-                <div className="flex justify-between items-start">
-                    <div>
-                        <h3 className="text-2xl font-bold text-slate-900">{result.filename}</h3>
-                    </div>
-                    <div className="text-right flex-shrink-0 ml-4">
-                        <p className="text-sm text-slate-500">Match Score</p>
-                        <p className="text-2xl font-bold text-blue-600">{result.score} <span className="text-base font-normal">/ 100</span></p>
-                    </div>
-                </div>
-
-                <div className="border-t my-6"></div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="md:col-span-2 space-y-8">
-                        <div>
-                            <h4 className="text-lg font-semibold text-slate-800 mb-3">Resume Content</h4>
-                             <pre className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-4 rounded-md">{resumeContent}</pre>
-                        </div>
-                    </div>
-                    <div className="md:col-span-1">
-                        <div className="bg-slate-50 p-4 rounded-lg sticky top-6">
-                            <h4 className="text-base font-semibold text-slate-800 mb-3">AI Review</h4>
-                             <p className="text-sm text-slate-600 whitespace-pre-wrap">{result.highlights}</p>
-                             {hasFile && (
-                                <div className="mt-6 text-center border-t pt-4">
-                                     <button onClick={handleDownload} className="inline-flex w-full justify-center items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
-                                        <DownloadIcon /><span>Download Original</span>
-                                     </button>
-                                </div>
-                             )}
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <TextView
+                content={resumeContent}
+                title={result.filename}
+                score={result.score}
+                highlights={result.highlights}
+                onDownload={hasFile ? handleDownload : undefined}
+                hasFile={hasFile}
+            />
         ) : (
-          <div className="flex items-center justify-center h-full text-slate-600">Loading resume...</div>
+          <div className="flex items-center justify-center h-full text-slate-600">
+            <p>No resume content available to display.</p>
+          </div>
         )}
       </main>
 
