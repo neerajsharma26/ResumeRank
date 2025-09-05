@@ -15,7 +15,7 @@ const CandidateColumn: React.FC<{ rankedResume: AnalysisResult['rankedResumes'][
         <div className="flex-shrink-0">
              <div className="flex justify-between items-start mb-4">
                 <div>
-                    <h3 className="text-xl font-bold text-slate-900">{rankedResume.filename}</h3>
+                    <h3 className="text-xl font-bold text-slate-900">{rankedResume.filename.replace(/_/g, ' ').replace('.txt', '')}</h3>
                 </div>
                 <div className="text-right flex-shrink-0 ml-2">
                     <p className="text-sm text-slate-500">Score</p>
