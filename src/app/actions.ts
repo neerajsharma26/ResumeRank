@@ -1,4 +1,3 @@
-// This file is intentionally left empty. The logic will be included in main-page.tsx for simplicity with use-server directive.
 'use server';
 
 import {
@@ -17,7 +16,7 @@ import {
   MatchKeywordsToResumeOutput,
 } from '@/ai/flows/match-keywords-to-resume';
 import {db} from '@/lib/firebase';
-import {collection, addDoc, serverTimestamp} from 'firebase/firestore';
+import {collection, addDoc, serverTimestamp, getDocs, query, orderBy, limit} from 'firebase/firestore';
 
 import type { AnalysisResult, Resume } from '@/lib/types';
 
@@ -65,12 +64,10 @@ export async function analyzeResumesAction(
       return acc;
     }, {} as AnalysisResult['details']);
     
-    // Sort rankedResumes by score descending
     const sortedRankedResumes = [...rankedResumes].sort((a, b) => b.score - a.score);
     
     const result: AnalysisResult = { rankedResumes: sortedRankedResumes, details };
 
-    // Store in Firestore
     if (userId) {
       await addDoc(collection(db, 'users', userId, 'analysisReports'), {
         ...result,
@@ -82,7 +79,34 @@ export async function analyzeResumesAction(
     return result;
   } catch (e: any) {
     console.error('Error in analyzeResumesAction:', e);
-    // Re-throw the error to be caught by the client
     throw new Error(e.message || 'An unexpected error occurred during analysis.');
+  }
+}
+
+export async function getAnalysisReports(userId: string): Promise<(AnalysisResult & { id: string, jobDescription: string, createdAt: string })[]> {
+  try {
+    if (!userId) {
+      throw new Error('User not authenticated');
+    }
+    
+    const reportsRef = collection(db, 'users', userId, 'analysisReports');
+    const q = query(reportsRef, orderBy('createdAt', 'desc'), limit(20));
+    const querySnapshot = await getDocs(q);
+    
+    const reports = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        jobDescription: data.jobDescription,
+        rankedResumes: data.rankedResumes,
+        details: data.details,
+        createdAt: (data.createdAt?.toDate() ?? new Date()).toISOString(),
+      };
+    });
+    
+    return reports;
+  } catch (e: any) {
+    console.error('Error fetching analysis reports:', e);
+    throw new Error('Failed to fetch analysis reports.');
   }
 }

@@ -1,14 +1,16 @@
 'use client';
 
-import {useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {useAuth} from '@/hooks/use-auth';
 import MainPage from '@/components/main-page';
 import { Loader2 } from 'lucide-react';
+import Dashboard from '@/components/dashboard';
 
 export default function Home() {
   const {user, loading} = useAuth();
   const router = useRouter();
+  const [showUploader, setShowUploader] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -23,5 +25,10 @@ export default function Home() {
       </div>
     );
   }
-  return <MainPage />;
+
+  if (showUploader) {
+      return <MainPage onBack={() => setShowUploader(false)} />;
+  }
+
+  return <Dashboard onNewAnalysis={() => setShowUploader(true)} />;
 }
