@@ -22,20 +22,19 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import type { AnalysisDetails } from '@/lib/types';
+import type { AnalysisDetails, CandidateStatus } from '@/lib/types';
 import type { RankResumesOutput } from '@/app/actions';
 import { Award, Briefcase, ChevronDown, Star, Tag, MoreVertical, CheckCircle, XCircle, Undo } from 'lucide-react';
 import { Button } from './ui/button';
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 interface CandidateCardProps {
   rank: number;
   rankedResume: RankResumesOutput[0];
   details: AnalysisDetails[string];
+  status: CandidateStatus;
+  onStatusChange: (status: CandidateStatus) => void;
 }
-
-type Status = 'none' | 'shortlisted' | 'rejected';
 
 const getRankColor = (rank: number) => {
   if (rank === 1) return 'bg-yellow-400 text-yellow-900';
@@ -48,8 +47,9 @@ export default function CandidateCard({
   rank,
   rankedResume,
   details,
+  status,
+  onStatusChange,
 }: CandidateCardProps) {
-  const [status, setStatus] = useState<Status>('none');
 
   const scoreColor =
     rankedResume.score > 80
@@ -94,18 +94,18 @@ export default function CandidateCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setStatus('shortlisted')}>
+                <DropdownMenuItem onClick={() => onStatusChange('shortlisted')}>
                   <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
                   <span>Shortlist</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setStatus('rejected')}>
+                <DropdownMenuItem onClick={() => onStatusChange('rejected')}>
                   <XCircle className="mr-2 h-4 w-4 text-red-500" />
                   <span>Reject</span>
                 </DropdownMenuItem>
                  {status !== 'none' && (
                   <>
                     <Separator className="my-1" />
-                    <DropdownMenuItem onClick={() => setStatus('none')}>
+                    <DropdownMenuItem onClick={() => onStatusChange('none')}>
                       <Undo className="mr-2 h-4 w-4" />
                       <span>Reset Status</span>
                     </DropdownMenuItem>

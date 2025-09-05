@@ -9,6 +9,8 @@ export type Resume = {
   content: string;
 };
 
+export type CandidateStatus = 'none' | 'shortlisted' | 'rejected';
+
 export type AnalysisDetails = {
   [key: string]: {
     skills: ParseResumeSkillsOutput;
