@@ -72,7 +72,7 @@ export async function analyzeResumesAction(
       return acc;
     }, {} as Record<string, CandidateStatus>);
     
-    const result: AnalysisResult = { rankedResumes: sortedRankedResumes, details, statuses };
+    const result: AnalysisResult = { rankedResumes: sortedRankedResumes, resumes, details, statuses };
 
     if (userId) {
       await addDoc(collection(db, 'users', userId, 'analysisReports'), {
@@ -129,6 +129,7 @@ export async function getAnalysisReports(userId: string): Promise<(AnalysisResul
         id: doc.id,
         jobDescription: data.jobDescription,
         rankedResumes: data.rankedResumes,
+        resumes: data.resumes || [],
         details: data.details,
         statuses: statuses,
         createdAt: (data.createdAt?.toDate() ?? new Date()).toISOString(),

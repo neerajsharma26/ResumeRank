@@ -240,7 +240,7 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
                                 onStatusChange={(newStatus) => handleStatusChange(rankedResume.filename, newStatus)}
                             />
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => onView(rankedResume.filename)} disabled={isViewingPastReport}>
+                        <Button variant="ghost" size="icon" onClick={() => onView(rankedResume.filename)}>
                             <ExternalLink className="h-5 w-5" />
                         </Button>
                     </div>

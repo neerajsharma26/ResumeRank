@@ -159,6 +159,7 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
   };
 
   const currentResult = analysisResult?.rankedResumes[viewingIndex];
+  const currentResume = analysisResult?.resumes.find(r => r.filename === currentResult?.filename);
   // In a past report, we don't have the original File object, so currentFile will be null.
   const currentFile = isViewingPastReport ? null : (currentResult ? resumeFiles.find(f => f.name === currentResult.filename) || null : null);
 
@@ -295,6 +296,7 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
             result={currentResult}
             details={analysisResult.details[currentResult.filename]}
             file={currentFile}
+            resumeContent={currentResume?.content}
             onNext={() => setViewingIndex(i => (i + 1) % analysisResult.rankedResumes.length)}
             onPrev={() => setViewingIndex(i => (i - 1 + analysisResult.rankedResumes.length) % analysisResult.rankedResumes.length)}
             hasNext={viewingIndex < analysisResult.rankedResumes.length - 1}

@@ -23,6 +23,7 @@ interface ResumeViewerModalProps {
   result: AnalysisResult['rankedResumes'][0];
   details: AnalysisResult['details'][string];
   file: File | null;
+  resumeContent?: string;
 }
 
 interface PdfPreviewProps {
@@ -103,9 +104,15 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ fileUrl, onDownload }) => {
     );
 };
 
+const TextView: React.FC<{ content: string }> = ({ content }) => (
+    <div className="bg-white rounded-lg shadow-xl w-full h-full overflow-y-auto p-8 text-slate-800">
+        <pre className="whitespace-pre-wrap text-sm">{content}</pre>
+    </div>
+);
+
 
 export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
-  isOpen, onClose, onNext, onPrev, hasNext, hasPrev, result, details, file
+  isOpen, onClose, onNext, onPrev, hasNext, hasPrev, result, details, file, resumeContent
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [fileUrl, setFileUrl] = useState('');
@@ -117,6 +124,9 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
       const url = URL.createObjectURL(file);
       setFileUrl(url);
       return () => URL.revokeObjectURL(url);
+    } else {
+        setCanPreview(false);
+        setFileUrl('');
     }
   }, [file]);
 
@@ -147,6 +157,8 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
   };
 
   if (!isOpen) return null;
+  
+  const hasFile = !!file;
 
   return (
     <div ref={modalRef} className="fixed inset-0 bg-black/75 z-50 flex flex-col p-4" role="dialog" aria-modal="true">
@@ -159,11 +171,10 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
       </header>
 
       <main className="flex-grow bg-slate-200 flex items-center justify-center overflow-hidden">
-        {fileUrl ? (
-          canPreview ? (
+        {hasFile && fileUrl && canPreview ? (
             <PdfPreview fileUrl={fileUrl} onDownload={handleDownload} />
-          ) : (
-             <div className="bg-white rounded-lg shadow-xl w-full h-full overflow-y-auto p-8 text-slate-800">
+        ) : resumeContent ? (
+            <div className="bg-white rounded-lg shadow-xl w-full h-full overflow-y-auto p-8 text-slate-800">
                 <div className="flex justify-between items-start">
                     <div>
                         <h3 className="text-2xl font-bold text-slate-900">{result.filename}</h3>
@@ -179,55 +190,25 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="md:col-span-2 space-y-8">
                         <div>
-                            <h4 className="text-lg font-semibold text-slate-800 mb-3">AI Review Summary</h4>
-                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{result.highlights}</p>
+                            <h4 className="text-lg font-semibold text-slate-800 mb-3">Resume Content</h4>
+                             <pre className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-4 rounded-md">{resumeContent}</pre>
                         </div>
-                         {details.keywords.matches?.length > 0 && (
-                            <div>
-                                <h4 className="text-lg font-semibold text-slate-800 mb-3">Matched Skills</h4>
-                                <ul className="space-y-3">
-                                    {details.keywords.matches.map((item, i) => (
-                                        <li key={i} className="text-sm leading-relaxed">
-                                            <strong className="font-semibold text-slate-700 block">{item}</strong>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-                        {details.keywords.missing?.length > 0 && (
-                            <div>
-                                <h4 className="text-lg font-semibold text-slate-800 mb-3">Missing Skills</h4>
-                                <div className="flex flex-wrap gap-2">
-                                    {details.keywords.missing.map((skill, i) => (
-                                        <span key={i} className="bg-red-100 text-red-800 px-2 py-1 rounded-md text-sm font-medium">{skill}</span>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
                     </div>
                     <div className="md:col-span-1">
                         <div className="bg-slate-50 p-4 rounded-lg sticky top-6">
-                            <h4 className="text-base font-semibold text-slate-800 mb-3">Score Breakdown</h4>
-                             <ul className="text-sm space-y-1.5 text-slate-600">
-                                <li className="flex justify-between items-center">
-                                    <span>Years of Experience</span>
-                                    <span className="font-bold text-slate-900">{details.skills.experienceYears}</span>
-                                </li>
-                                <li className="flex justify-between items-center">
-                                    <span>Keyword Score</span>
-                                    <span className="font-bold text-slate-900">{details.keywords.score}</span>
-                                </li>
-                            </ul>
-                            <div className="mt-6 text-center border-t pt-4">
-                                 <button onClick={handleDownload} className="inline-flex w-full justify-center items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
-                                    <DownloadIcon /><span>Download Original</span>
-                                 </button>
-                            </div>
+                            <h4 className="text-base font-semibold text-slate-800 mb-3">AI Review</h4>
+                             <p className="text-sm text-slate-600 whitespace-pre-wrap">{result.highlights}</p>
+                             {hasFile && (
+                                <div className="mt-6 text-center border-t pt-4">
+                                     <button onClick={handleDownload} className="inline-flex w-full justify-center items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
+                                        <DownloadIcon /><span>Download Original</span>
+                                     </button>
+                                </div>
+                             )}
                         </div>
                     </div>
                 </div>
             </div>
-          )
         ) : (
           <div className="flex items-center justify-center h-full text-slate-600">Loading resume...</div>
         )}

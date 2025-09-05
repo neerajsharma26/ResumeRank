@@ -20,6 +20,7 @@ export type AnalysisDetails = {
 
 export type AnalysisResult = {
   rankedResumes: RankResumesOutput;
+  resumes: Resume[];
   details: AnalysisDetails;
   statuses: Record<string, CandidateStatus>;
 };
