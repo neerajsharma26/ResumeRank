@@ -187,13 +187,13 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
   
   const downloadCSV = () => {
       if (!result) return;
-      const selectedResumes = result.rankedResumes.filter(r => selectedForCompare.has(r.filename));
-      const csv = generateCSV(selectedResumes);
+      const shortlistedResumes = result.rankedResumes.filter(r => candidateStatuses[r.filename] === 'shortlisted');
+      const csv = generateCSV(shortlistedResumes);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'resumerank_selection.csv';
+      a.download = 'resumerank_shortlisted.csv';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -205,9 +205,14 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
     if (activeTab === 'all') return result.rankedResumes;
     return result.rankedResumes.filter(r => candidateStatuses[r.filename] === activeTab);
   }, [result, activeTab, candidateStatuses]);
+  
+  const shortlistedCount = React.useMemo(() => {
+    if (!result) return 0;
+    return Object.values(candidateStatuses).filter(s => s === 'shortlisted').length;
+  }, [result, candidateStatuses]);
 
   const canCompare = selectedForCompare.size >= 2 && selectedForCompare.size <= 3;
-  const canDownload = selectedForCompare.size > 0;
+  const canDownload = shortlistedCount > 0;
 
   return (
     <div className="space-y-6">
@@ -231,7 +236,7 @@ export default function ResultsView({ result, isLoading, onCompare, onView, jobD
                 </Button>
                 <Button variant="outline" onClick={downloadCSV} disabled={!canDownload}>
                     <Download className="mr-2 h-4 w-4" />
-                    Download CSV ({selectedForCompare.size})
+                    Download Shortlisted ({shortlistedCount})
                 </Button>
             </div>
             )}
