@@ -1,0 +1,22 @@
+diff --git a/node_modules/genkit/lib/runner.js b/node_modules/genkit/lib/runner.js
+index 455e378035f524316d860d540263641147a46e11..637a2845c43d838c351aa2d97374b32525143329 100644
+--- a/node_modules/genkit/lib/runner.js
++++ b/node_modules/genkit/lib/runner.js
+@@ -14,14 +14,14 @@
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.getRunner = exports.run = exports.defineRunner = void 0;
+ const __1 = require("..");
+-const promise_1 = require("node:util/promise");
++const util_1 = require("util");
+ const runnerMap = new Map();
+ function defineRunner(name, runner) {
+     runnerMap.set(name, runner);
+ }
+ exports.defineRunner = defineRunner;
+ function run(options, cb) {
+-    const { resolve, reject, promise } = (0, promise_1.withResolvers)();
++    const { resolve, reject, promise } = (0, util_1.promisify)(() => { })();
+     const runner = getRunner(options.runner);
+     runner(options.name, cb, resolve, reject);
+     return promise;
+
