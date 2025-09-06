@@ -1,24 +1,27 @@
 'use client';
-import {Rocket, LogOut} from 'lucide-react';
-import {useAuth} from '@/hooks/use-auth';
-import {Button} from '@/components/ui/button';
+import { LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {Avatar, AvatarFallback, AvatarImage} from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Logo } from '@/components/logo';
 
 export default function Header() {
-  const {user, logout} = useAuth();
+  const { user, logout } = useAuth();
 
   return (
     <header className="bg-card border-b sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-3">
-            <Rocket className="h-7 w-7 text-primary" />
+            <div className="h-8 w-8">
+              <Logo />
+            </div>
             <h1 className="text-2xl font-bold text-foreground">Hire Varahe</h1>
           </div>
           <div className="flex items-center space-x-4">

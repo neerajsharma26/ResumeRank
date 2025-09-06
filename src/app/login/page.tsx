@@ -3,9 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Rocket, Chrome } from 'lucide-react';
+import { Chrome } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useEffect } from 'react';
+import { Logo } from '@/components/logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,8 +27,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background">
       <Card className="mx-auto w-full max-w-md shadow-lg">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex items-center justify-center">
-            <Rocket className="h-12 w-12 text-primary" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+            <Logo />
           </div>
           <CardTitle className="text-3xl font-bold">Hire Varahe</CardTitle>
           <CardDescription>
