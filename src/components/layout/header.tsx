@@ -19,7 +19,7 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-3">
             <Rocket className="h-7 w-7 text-primary" />
-            <h1 className="text-2xl font-bold text-foreground">ResumeRank</h1>
+            <h1 className="text-2xl font-bold text-foreground">Hire Varahe</h1>
           </div>
           <div className="flex items-center space-x-4">
             <p className="text-sm text-muted-foreground hidden md:block">

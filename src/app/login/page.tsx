@@ -29,7 +29,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex items-center justify-center">
             <Rocket className="h-12 w-12 text-primary" />
           </div>
-          <CardTitle className="text-3xl font-bold">ResumeRank</CardTitle>
+          <CardTitle className="text-3xl font-bold">Hire Varahe</CardTitle>
           <CardDescription>
             Sign in to access your AI-powered resume analysis dashboard.
           </CardDescription>

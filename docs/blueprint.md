@@ -1,4 +1,4 @@
-# **App Name**: ResumeRank
+# **App Name**: Hire Varahe
 
 ## Core Features:
 

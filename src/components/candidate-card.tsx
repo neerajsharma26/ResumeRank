@@ -136,13 +136,13 @@ export default function CandidateCard({
                   <div>
                     <h5 className="font-medium mb-2 flex items-center gap-2"><Star className="w-4 h-4 text-yellow-500"/> Skills</h5>
                     <div className="flex flex-wrap gap-2">
-                      {details.skills.skills.length > 0 ? details.skills.skills.map(s => <Badge key={s} variant="secondary">{s}</Badge>) : <span className="text-muted-foreground">None found</span>}
+                      {details.skills.skills.length > 0 ? details.skills.skills.map((s, i) => <Badge key={`${s}-${i}`} variant="secondary">{s}</Badge>) : <span className="text-muted-foreground">None found</span>}
                     </div>
                   </div>
                   <div>
                     <h5 className="font-medium mb-2 flex items-center gap-2"><Award className="w-4 h-4 text-blue-500"/> Certifications</h5>
                     <div className="flex flex-wrap gap-2">
-                      {details.skills.certifications.length > 0 ? details.skills.certifications.map(c => <Badge key={c} variant="secondary">{c}</Badge>) : <span className="text-muted-foreground">None found</span>}
+                      {details.skills.certifications.length > 0 ? details.skills.certifications.map((c, i) => <Badge key={`${c}-${i}`} variant="secondary">{c}</Badge>) : <span className="text-muted-foreground">None found</span>}
                     </div>
                   </div>
                 </div>
@@ -153,13 +153,13 @@ export default function CandidateCard({
                    <div>
                     <h5 className="font-medium mb-2">Matched Keywords</h5>
                     <div className="flex flex-wrap gap-2">
-                      {details.keywords.matches.length > 0 ? details.keywords.matches.map(m => <Badge key={m} className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">{m}</Badge>) : <span className="text-muted-foreground">None</span>}
+                      {details.keywords.matches.length > 0 ? details.keywords.matches.map((m, i) => <Badge key={`${m}-${i}`} className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">{m}</Badge>) : <span className="text-muted-foreground">None</span>}
                     </div>
                   </div>
                    <div>
                     <h5 className="font-medium mb-2">Missing Keywords</h5>
                     <div className="flex flex-wrap gap-2">
-                      {details.keywords.missing.length > 0 ? details.keywords.missing.map(m => <Badge key={m} variant="destructive" className="bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300">{m}</Badge>) : <span className="text-muted-foreground">None</span>}
+                      {details.keywords.missing.length > 0 ? details.keywords.missing.map((m, i) => <Badge key={`${m}-${i}`} variant="destructive" className="bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300">{m}</Badge>) : <span className="text-muted-foreground">None</span>}
                     </div>
                   </div>
                 </div>

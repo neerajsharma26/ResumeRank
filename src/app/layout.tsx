@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/components/auth-provider';
 
 export const metadata: Metadata = {
-  title: 'ResumeRank',
+  title: 'Hire Varahe',
   description: 'AI-Powered Resume Analysis and Ranking',
 };
 
