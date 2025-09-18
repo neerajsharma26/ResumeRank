@@ -76,22 +76,31 @@ async function limitConcurrency<T>(
   tasks: (() => Promise<T>)[],
   limit: number
 ): Promise<T[]> {
-  const results: T[] = [];
-  let executing: Promise<any>[] = [];
+    const results: T[] = [];
+    const executing = new Set<Promise<any>>();
+    const taskQueue = [...tasks];
 
-  for (const task of tasks) {
-    const p = Promise.resolve().then(() => task());
-    results.push(await p as T);
+    const runTask = async (task: () => Promise<T>): Promise<void> => {
+        const promise = task().then(result => {
+            results.push(result);
+        });
 
-    if (limit <= tasks.length) {
-      const e: Promise<any> = p.then(() => executing.splice(executing.indexOf(e), 1));
-      executing.push(e);
-      if (executing.length >= limit) {
-        await Promise.race(executing);
-      }
+        executing.add(promise);
+        await promise;
+        executing.delete(promise);
+    };
+
+    while (taskQueue.length > 0) {
+        while (executing.size < limit && taskQueue.length > 0) {
+            runTask(taskQueue.shift()!);
+        }
+        if (executing.size > 0) {
+            await Promise.race(executing);
+        }
     }
-  }
-  return results;
+
+    await Promise.all(executing);
+    return results;
 }
 
 export async function analyzeResumesAction(
