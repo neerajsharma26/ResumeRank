@@ -138,7 +138,8 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
           data: await file.arrayBuffer(),
         }))
       );
-      await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload, onAnalysisComplete);
+      const report = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload);
+      onAnalysisComplete(report);
     } catch (e: any) {
       console.error(e);
       toast({

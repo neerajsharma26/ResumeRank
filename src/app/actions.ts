@@ -75,9 +75,8 @@ export async function analyzeResumesAction(
   resumes: Resume[],
   weights: MetricWeights,
   userId: string,
-  files: {filename: string; data: ArrayBuffer}[],
-  onAnalysisComplete: (report: Report) => void
-): Promise<void> {
+  files: {filename: string; data: ArrayBuffer}[]
+): Promise<Report> {
   try {
     if (!jobDescription.trim()) {
       throw new Error('Job description cannot be empty.');
@@ -210,7 +209,7 @@ export async function analyzeResumesAction(
         createdAt: (finalData?.createdAt?.toDate() ?? new Date()).toISOString(),
     };
 
-    onAnalysisComplete(finalReport);
+    return finalReport;
 
   } catch (e: any) {
     console.error('Error in analyzeResumesAction:', e);
