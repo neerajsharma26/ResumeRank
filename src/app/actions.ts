@@ -38,7 +38,7 @@ import type {
   CandidateStatus,
   AnalysisDetails,
 } from '@/lib/types';
-import { Report } from '@/app/page';
+import type { Report } from '@/app/page';
 
 export type {
   RankResumesOutput,
@@ -76,26 +76,22 @@ async function limitConcurrency<T>(
   tasks: (() => Promise<T>)[],
   limit: number
 ): Promise<T[]> {
-  const executing: Promise<void>[] = [];
-  const allResultPromises: Promise<T>[] = [];
+  const results: T[] = [];
+  let executing: Promise<any>[] = [];
 
   for (const task of tasks) {
-    const p: Promise<T> = task().then(result => {
-      executing.splice(executing.indexOf(promiseWrapper), 1);
-      return result;
-    });
+    const p = Promise.resolve().then(() => task());
+    results.push(await p as T);
 
-    allResultPromises.push(p);
-
-    const promiseWrapper = p.then(() => {}).catch(() => {});
-    executing.push(promiseWrapper);
-    
-    if (executing.length >= limit) {
-      await Promise.race(executing);
+    if (limit <= tasks.length) {
+      const e: Promise<any> = p.then(() => executing.splice(executing.indexOf(e), 1));
+      executing.push(e);
+      if (executing.length >= limit) {
+        await Promise.race(executing);
+      }
     }
   }
-
-  return Promise.all(allResultPromises);
+  return results;
 }
 
 export async function analyzeResumesAction(
@@ -144,10 +140,12 @@ export async function analyzeResumesAction(
       const detailsArray = await limitConcurrency(detailTasks, 2);
 
       const batchDetails = detailsArray.reduce((acc, detail) => {
-        acc[detail.filename] = {
-          skills: detail.skills,
-          keywords: detail.keywords,
-        };
+        if(detail) {
+          acc[detail.filename] = {
+            skills: detail.skills,
+            keywords: detail.keywords,
+          };
+        }
         return acc;
       }, {} as AnalysisDetails);
 
@@ -308,6 +306,6 @@ export async function getAnalysisReports(
     return reports;
   } catch (e: any) {
     console.error('Error fetching analysis reports:', e);
-    throw new Error('Failed to fetch analysis reports.');
+    throw new Error('Failed to fetch past analysis reports.');
   }
 }
