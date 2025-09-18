@@ -53,15 +53,13 @@ async function retry<T>(fn: () => Promise<T>): Promise<T> {
       return await fn();
     } catch (e: any) {
       lastError = e;
-      // Check for specific rate limit or temporary server error status codes
       if (e.message?.includes('429') || e.message?.includes('503')) {
-         if (i < 4) { // Only delay if it's not the last attempt
-          const delay = 2000 * Math.pow(2, i); // Exponential backoff
+         if (i < 4) { 
+          const delay = 2000 * Math.pow(2, i);
           console.log(`Attempt ${i + 1} failed with ${e.message}. Retrying in ${delay}ms...`);
           await new Promise(res => setTimeout(res, delay));
         }
       } else {
-        // Don't retry on other errors
         throw e;
       }
     }
@@ -99,27 +97,18 @@ export async function analyzeResumesAction(
         return acc;
     }, {} as AnalysisDetails);
 
+    // Create a simple, unranked list of resumes for the initial report.
+    // The ranking can be done later as a separate, more robust action.
+    const unrankedResumes = resumes.map(resume => ({
+      filename: resume.filename,
+      score: allDetails[resume.filename].keywords.score || 0, // Use keyword score as a placeholder
+      highlights: allDetails[resume.filename].keywords.summary || 'Awaiting full ranking analysis.',
+    }));
 
-    // Step 2: Create token-light summaries for ranking
-    const tokenLightResumes = resumes.map(resume => {
-      const detail = allDetails[resume.filename];
-      const summary = `Top Skills: ${detail.skills.skills.slice(0, 5).join(', ')}. Experience: ${detail.skills.experienceYears} years. Keyword Score: ${detail.keywords.score}. Resume Excerpt: ${resume.content.substring(0, 500)}`;
-      return {
-        filename: resume.filename,
-        content: summary,
-      };
-    });
+    // Sort by placeholder score
+    const sortedRankedResumes = [...unrankedResumes].sort((a, b) => b.score - a.score);
 
-    // Step 3: Rank all resumes at once using the summaries
-    const rankInput: RankResumesInput = {
-      resumes: tokenLightResumes,
-      jobDescription,
-      weights,
-    };
-    const allRankedResumes = await retry(() => rankResumesFlow(rankInput));
-    const sortedRankedResumes = [...allRankedResumes].sort((a, b) => b.score - a.score);
-
-    // Step 4: Prepare initial report data for Firestore
+    // Prepare initial report data for Firestore
     const statuses = sortedRankedResumes.reduce((acc, r) => {
       acc[r.filename] = 'none';
       return acc;
@@ -133,10 +122,10 @@ export async function analyzeResumesAction(
         resumes: resumes.map(r => ({ filename: r.filename, url: '' })) // Placeholder for URLs
     };
 
-    // Step 5: Create the report document in Firestore
+    // Create the report document in Firestore
     const reportRef = await addDoc(collection(db, 'users', userId, 'analysisReports'), initialReportData);
 
-    // Step 6: Write details to a subcollection
+    // Write details to a subcollection
     const detailsBatch = writeBatch(db);
     for (const [filename, detailData] of Object.entries(allDetails)) {
         const detailRef = doc(db, 'users', userId, 'analysisReports', reportRef.id, 'details', filename);
@@ -144,7 +133,7 @@ export async function analyzeResumesAction(
     }
     await detailsBatch.commit();
 
-    // Step 7: Upload files to Storage and get URLs
+    // Upload files to Storage and get URLs
     const uploadPromises = files.map(async file => {
         const storageRef = ref(storage, `resumehire/${userId}/${reportRef.id}/${file.filename}`);
         await uploadBytes(storageRef, file.data);
@@ -158,7 +147,7 @@ export async function analyzeResumesAction(
         return acc;
     }, {} as Record<string, string>);
 
-    // Step 8: Update the report with resume URLs
+    // Update the report with resume URLs
     const finalResumes = resumes.map(r => ({
         filename: r.filename,
         url: resumeUrlMap[r.filename] || ''
@@ -166,7 +155,7 @@ export async function analyzeResumesAction(
 
     await updateDoc(reportRef, { resumes: finalResumes });
 
-    // Step 9: Construct the final report object to return to the client
+    // Construct the final report object to return to the client
     const finalDocSnapshot = await getDoc(reportRef);
     const finalDocData = finalDocSnapshot.data();
 
