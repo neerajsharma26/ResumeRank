@@ -61,8 +61,8 @@ async function rankResumesInBatches(
 
 async function retry<T>(
   fn: () => Promise<T>,
-  retries = 3,
-  delay = 1000
+  retries = 5,
+  delay = 2000
 ): Promise<T> {
   let lastError: Error | undefined;
   for (let i = 0; i < retries; i++) {
@@ -70,8 +70,15 @@ async function retry<T>(
       return await fn();
     } catch (e: any) {
       lastError = e;
-      if (i < retries - 1) {
-        await new Promise(res => setTimeout(res, delay * Math.pow(2, i)));
+      // Only retry on 503 errors, fail fast on others
+      if (e.message?.includes('503')) {
+        if (i < retries - 1) {
+          console.log(`Attempt ${i + 1} failed. Retrying in ${delay * Math.pow(2, i)}ms...`);
+          await new Promise(res => setTimeout(res, delay * Math.pow(2, i)));
+        }
+      } else {
+        // Don't retry for other errors
+        break;
       }
     }
   }
@@ -82,9 +89,7 @@ async function limitConcurrency<T>(
   tasks: (() => Promise<T>)[],
   limit: number
 ): Promise<T[]> {
-  const results: T[] = [];
-  let executing: Promise<void>[] = [];
-
+  const executing: Promise<void>[] = [];
   const allResultPromises: Promise<T>[] = [];
 
   for (const task of tasks) {
