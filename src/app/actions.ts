@@ -47,31 +47,28 @@ export type {
   Report
 };
 
-
-async function retry<T>(
-  fn: () => Promise<T>,
-  retries = 5,
-  delay = 2000
-): Promise<T> {
+async function retry<T>(fn: () => Promise<T>): Promise<T> {
   let lastError: Error | undefined;
-  for (let i = 0; i < retries; i++) {
+  for (let i = 0; i < 5; i++) {
     try {
       return await fn();
     } catch (e: any) {
       lastError = e;
       if (e.message?.includes('503')) {
-        if (i < retries - 1) {
-          console.log(`Attempt ${i + 1} failed with 503. Retrying in ${delay * Math.pow(2, i)}ms...`);
-          await new Promise(res => setTimeout(res, delay * Math.pow(2, i)));
+         if (i < 4) {
+          const delay = 2000 * Math.pow(2, i);
+          console.log(`Attempt ${i + 1} failed with 503. Retrying in ${delay}ms...`);
+          await new Promise(res => setTimeout(res, delay));
         }
       } else {
         // Don't retry on non-503 errors
-        break;
+        throw e;
       }
     }
   }
   throw lastError;
 }
+
 
 export async function analyzeResumesAction(
   jobDescription: string,
@@ -97,25 +94,19 @@ export async function analyzeResumesAction(
       const resumeBatch = resumes.slice(i, i + batchSize);
       console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(resumes.length / batchSize)}...`);
 
-      const detailPromises = resumeBatch.map(
-        (resume) =>
-          retry(async () => {
-            console.log(`Analyzing resume: ${resume.filename}`);
-            const skillsPromise = parseResumeSkillsFlow({
-              resumeText: resume.content,
-            });
-            const keywordsPromise = matchKeywordsToResumeFlow({
-              resumeText: resume.content,
-              jobDescription,
-            });
-            const [skills, keywords] = await Promise.all([
-              skillsPromise,
-              keywordsPromise,
-            ]);
-            console.log(`Finished analyzing resume: ${resume.filename}`);
-            return {filename: resume.filename, skills, keywords};
-          })
-      );
+      const detailPromises = resumeBatch.map(async (resume) => {
+          console.log(`Analyzing resume: ${resume.filename}`);
+          const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content }));
+          const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
+
+          const [skills, keywords] = await Promise.all([
+            skillsPromise,
+            keywordsPromise,
+          ]);
+
+          console.log(`Finished analyzing resume: ${resume.filename}`);
+          return {filename: resume.filename, skills, keywords};
+      });
 
       const detailsArray = await Promise.all(detailPromises);
 
