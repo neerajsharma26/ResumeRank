@@ -6,9 +6,15 @@ import {useAuth} from '@/hooks/use-auth';
 import MainPage from '@/components/main-page';
 import { Loader2 } from 'lucide-react';
 import Dashboard from '@/components/dashboard';
-import type { AnalysisResult } from '@/lib/types';
+import type { AnalysisResult, Resume } from '@/lib/types';
 
-export type Report = AnalysisResult & { id: string, jobDescription: string, createdAt: string };
+export type Report = Omit<AnalysisResult, 'resumes'> & { 
+  id: string, 
+  jobDescription: string, 
+  createdAt: string, 
+  resumes: (Omit<Resume, 'content'> & {url?: string})[]
+};
+
 
 export default function Home() {
   const {user, loading} = useAuth();

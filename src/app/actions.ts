@@ -32,7 +32,6 @@ import {
 import {ref, uploadBytes, getDownloadURL} from 'firebase/storage';
 
 import type {
-  AnalysisResult,
   Resume,
   MetricWeights,
   CandidateStatus,
@@ -147,7 +146,7 @@ export async function analyzeResumesAction(
       return acc;
     }, {} as Record<string, CandidateStatus>);
     
-    const initialResult: Omit<AnalysisResult, 'id' | 'createdAt'> = {
+    const initialResult = {
       rankedResumes: sortedRankedResumes,
       resumes: resumes.map(r => ({ filename: r.filename, content: ''})), // Content will be stored in Storage
       details: {}, // Details will be in a subcollection
@@ -203,9 +202,10 @@ export async function analyzeResumesAction(
     const finalReport: Report = {
         id: reportRef.id,
         jobDescription,
-        ...initialResult,
-        resumes: initialResult.resumes,
+        rankedResumes: initialResult.rankedResumes,
+        resumes: initialResult.resumes.map(r => ({filename: r.filename, url: (r as any).url})),
         details: allDetails,
+        statuses: initialResult.statuses,
         createdAt: (finalData?.createdAt?.toDate() ?? new Date()).toISOString(),
     };
 
@@ -271,7 +271,7 @@ export async function getAnalysisReports(
         details: details,
         statuses: statuses,
         createdAt: (data.createdAt?.toDate() ?? new Date()).toISOString(),
-      };
+      } as Report;
     });
 
     const reports = await Promise.all(reportsPromises);

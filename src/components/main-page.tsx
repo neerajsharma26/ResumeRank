@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { analyzeResumesAction } from '@/app/actions';
+import { analyzeResumesAction, Report } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { AnalysisResult, Resume, MetricWeights } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
@@ -16,7 +16,6 @@ import { FileUpload } from './file-upload';
 import { ComparisonModal } from './comparison-modal';
 import { ResumeViewerModal } from './resume-viewer-modal';
 import { WeightSliders } from './weight-sliders';
-import type { Report } from '@/app/page';
 
 const pdfjsLibPromise = import('pdfjs-dist');
 let pdfjsLib: typeof PdfJs | null = null;
@@ -35,7 +34,7 @@ const DEFAULT_WEIGHTS: MetricWeights = {
 
 interface MainPageProps {
   onBack: () => void;
-  existingResult?: Report;
+  existingResult?: Report | null;
   onAnalysisComplete: (report: Report) => void;
 }
 
@@ -44,7 +43,6 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   const [jobDescriptionFile, setJobDescriptionFile] = React.useState<File[]>([]);
   const [resumeFiles, setResumeFiles] = React.useState<File[]>([]);
   const [weights, setWeights] = React.useState<MetricWeights>(DEFAULT_WEIGHTS);
-  const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(existingResult || null);
   const [isLoading, setIsLoading] = React.useState(false);
   
   const [isComparisonModalOpen, setIsComparisonModalOpen] = React.useState(false);
@@ -57,6 +55,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   const { user } = useAuth();
 
   const isViewingPastReport = !!existingResult;
+  const analysisResult = existingResult;
   
   const fileToText = async (file: File): Promise<string> => {
     if (!pdfjsLib) {
@@ -128,7 +127,6 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
     }
 
     setIsLoading(true);
-    setAnalysisResult(null);
 
     try {
       const resumes = await Promise.all(resumeFiles.map(fileToResume));
