@@ -73,48 +73,6 @@ async function retry<T>(
   throw lastError;
 }
 
-async function limitConcurrency<T>(
-  tasks: (() => Promise<T>)[],
-  limit: number
-): Promise<T[]> {
-  const results: T[] = [];
-  const active: Promise<void>[] = [];
-  let taskIndex = 0;
-
-  const enqueue = (): Promise<void> | void => {
-    if (taskIndex === tasks.length) {
-      return;
-    }
-    const task = tasks[taskIndex]!;
-    const currentIndex = taskIndex;
-    taskIndex++;
-    
-    const promise = task().then(result => {
-      results[currentIndex] = result;
-    });
-
-    const worker: Promise<void> = promise.then(() => {
-        const index = active.indexOf(worker);
-        if (index > -1) {
-            active.splice(index, 1);
-        }
-        return enqueue();
-    });
-    
-    active.push(worker);
-  };
-  
-  const initialActives: (Promise<void> | void)[] = [];
-  for (let i = 0; i < Math.min(limit, tasks.length); i++) {
-    initialActives.push(enqueue());
-  }
-
-  await Promise.all(initialActives);
-  await Promise.all(active);
-  
-  return results;
-}
-
 export async function analyzeResumesAction(
   jobDescription: string,
   resumes: Resume[],
@@ -139,8 +97,8 @@ export async function analyzeResumesAction(
       const resumeBatch = resumes.slice(i, i + batchSize);
       console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(resumes.length / batchSize)}...`);
 
-      const detailTasks = resumeBatch.map(
-        (resume) => () =>
+      const detailPromises = resumeBatch.map(
+        (resume) =>
           retry(async () => {
             console.log(`Analyzing resume: ${resume.filename}`);
             const skillsPromise = parseResumeSkillsFlow({
@@ -159,7 +117,7 @@ export async function analyzeResumesAction(
           })
       );
 
-      const detailsArray = await limitConcurrency(detailTasks, 2);
+      const detailsArray = await Promise.all(detailPromises);
 
       const batchDetails = detailsArray.reduce((acc, detail) => {
         if(detail) {
