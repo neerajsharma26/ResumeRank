@@ -84,60 +84,48 @@ export async function analyzeResumesAction(
       throw new Error('Please select at least one resume to analyze.');
     }
 
-    const batchSize = 2;
-    const allRankedResumes: RankResumesOutput = [];
-    const allDetails: AnalysisDetails = {};
+    const detailPromises = resumes.map(async (resume) => {
+        console.log(`Analyzing resume: ${resume.filename}`);
+        const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content }));
+        const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
 
-    for (let i = 0; i < resumes.length; i += batchSize) {
-      const resumeBatch = resumes.slice(i, i + batchSize);
-      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(resumes.length / batchSize)}...`);
+        const [skills, keywords] = await Promise.all([
+          skillsPromise,
+          keywordsPromise,
+        ]);
 
-      const detailPromises = resumeBatch.map(async (resume) => {
-          console.log(`Analyzing resume: ${resume.filename}`);
-          const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content }));
-          const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
+        console.log(`Finished analyzing resume: ${resume.filename}`);
+        return {filename: resume.filename, skills, keywords};
+    });
 
-          const [skills, keywords] = await Promise.all([
-            skillsPromise,
-            keywordsPromise,
-          ]);
+    const detailsArray = await Promise.all(detailPromises);
 
-          console.log(`Finished analyzing resume: ${resume.filename}`);
-          return {filename: resume.filename, skills, keywords};
-      });
-
-      const detailsArray = await Promise.all(detailPromises);
-
-      const batchDetails = detailsArray.reduce((acc, detail) => {
-        if(detail) {
-          acc[detail.filename] = {
-            skills: detail.skills,
-            keywords: detail.keywords,
-          };
-        }
-        return acc;
-      }, {} as AnalysisDetails);
-
-      Object.assign(allDetails, batchDetails);
-
-      const tokenLightResumes = resumeBatch.map(resume => {
-        const detail = batchDetails[resume.filename];
-        const summary = `Top Skills: ${detail.skills.skills.slice(0, 5).join(', ')}. Experience: ${detail.skills.experienceYears} years. Keyword Score: ${detail.keywords.score}. Resume Excerpt: ${resume.content.substring(0, 500)}`;
-        return {
-          filename: resume.filename,
-          content: summary,
+    const allDetails = detailsArray.reduce((acc, detail) => {
+      if(detail) {
+        acc[detail.filename] = {
+          skills: detail.skills,
+          keywords: detail.keywords,
         };
-      });
+      }
+      return acc;
+    }, {} as AnalysisDetails);
 
-      const rankInput: RankResumesInput = {
-        resumes: tokenLightResumes,
-        jobDescription,
-        weights,
+    const tokenLightResumes = resumes.map(resume => {
+      const detail = allDetails[resume.filename];
+      const summary = `Top Skills: ${detail.skills.skills.slice(0, 5).join(', ')}. Experience: ${detail.skills.experienceYears} years. Keyword Score: ${detail.keywords.score}. Resume Excerpt: ${resume.content.substring(0, 500)}`;
+      return {
+        filename: resume.filename,
+        content: summary,
       };
-      
-      const rankedBatch = await retry(() => rankResumesFlow(rankInput));
-      allRankedResumes.push(...rankedBatch);
-    }
+    });
+
+    const rankInput: RankResumesInput = {
+      resumes: tokenLightResumes,
+      jobDescription,
+      weights,
+    };
+    
+    const allRankedResumes = await retry(() => rankResumesFlow(rankInput));
     
     const sortedRankedResumes = [...allRankedResumes].sort((a, b) => b.score - a.score);
 
