@@ -85,7 +85,7 @@ export async function analyzeResumesAction(
     }
 
     const allDetails: AnalysisDetails = {};
-    const batchSize = 2; // Process 2 resumes at a time
+    const batchSize = 2; 
 
     for (let i = 0; i < resumes.length; i += batchSize) {
         const batch = resumes.slice(i, i + batchSize);
