@@ -53,14 +53,14 @@ async function retry<T>(fn: () => Promise<T>): Promise<T> {
       return await fn();
     } catch (e: any) {
       lastError = e;
-      if (e.message?.includes('503')) {
+      if (e.message?.includes('503') || e.message?.includes('429')) {
          if (i < 4) {
           const delay = 2000 * Math.pow(2, i);
-          console.log(`Attempt ${i + 1} failed with 503. Retrying in ${delay}ms...`);
+          console.log(`Attempt ${i + 1} failed with ${e.message}. Retrying in ${delay}ms...`);
           await new Promise(res => setTimeout(res, delay));
         }
       } else {
-        // Don't retry on non-503 errors
+        // Don't retry on other errors
         throw e;
       }
     }
@@ -85,11 +85,11 @@ export async function analyzeResumesAction(
     }
 
     const allDetails: AnalysisDetails = {};
-    const batchSize = 2;
+    const batchSize = 2; // Process 2 resumes at a time
 
     for (let i = 0; i < resumes.length; i += batchSize) {
         const batch = resumes.slice(i, i + batchSize);
-        console.log(`Processing batch ${i / batchSize + 1}...`);
+        console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(resumes.length / batchSize)}...`);
         
         const detailPromises = batch.map(async (resume) => {
             console.log(`Analyzing resume: ${resume.filename}`);
