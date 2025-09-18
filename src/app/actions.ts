@@ -76,28 +76,37 @@ async function limitConcurrency<T>(
   tasks: (() => Promise<T>)[],
   limit: number
 ): Promise<T[]> {
-  const results: (T | Promise<T>)[] = [];
-  const queue = [...tasks];
-  
-  const runTask = async (workerIndex: number): Promise<void> => {
-    while (queue.length > 0) {
-      const task = queue.shift();
+  const results: PromiseSettledResult<T>[] = [];
+  let taskIndex = 0;
+
+  const runTask = async (): Promise<void> => {
+    while (taskIndex < tasks.length) {
+      const currentIndex = taskIndex++;
+      const task = tasks[currentIndex];
+
       if (task) {
-        const taskIndex = tasks.length - queue.length - 1;
         try {
           const result = await task();
-          results[taskIndex] = result;
-        } catch(e) {
-          results[taskIndex] = Promise.reject(e);
+          results[currentIndex] = { status: 'fulfilled', value: result };
+        } catch (error) {
+          results[currentIndex] = { status: 'rejected', reason: error };
         }
       }
     }
   };
 
-  const workers = Array(limit).fill(null).map((_, i) => runTask(i));
+  const workers = Array(limit).fill(null).map(() => runTask());
   await Promise.all(workers);
   
-  return Promise.all(results);
+  return results.map(result => {
+    if (result.status === 'fulfilled') {
+      return result.value;
+    }
+    // The retry logic within the task should handle transient errors,
+    // so if we get here, it's likely a persistent failure. We throw
+    // to stop the entire analysis if one resume detail fails processing.
+    throw result.reason; 
+  });
 }
 
 export async function analyzeResumesAction(
