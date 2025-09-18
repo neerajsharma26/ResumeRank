@@ -53,9 +53,9 @@ async function retry<T>(fn: () => Promise<T>): Promise<T> {
       return await fn();
     } catch (e: any) {
       lastError = e;
-      if (e.message?.includes('503') || e.message?.includes('429')) {
-         if (i < 4) {
-          const delay = 2000 * Math.pow(2, i);
+      if (e.message?.includes('429') || e.message?.includes('503')) {
+         if (i < 4) { // Only delay if it's not the last attempt
+          const delay = 2000 * Math.pow(2, i); // Exponential backoff
           console.log(`Attempt ${i + 1} failed with ${e.message}. Retrying in ${delay}ms...`);
           await new Promise(res => setTimeout(res, delay));
         }
