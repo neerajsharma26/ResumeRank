@@ -76,33 +76,28 @@ async function limitConcurrency<T>(
   tasks: (() => Promise<T>)[],
   limit: number
 ): Promise<T[]> {
-  const results: T[] = [];
-  const executing = new Set<Promise<any>>();
-  const taskQueue = [...tasks];
-  let position = 0;
-
-  const enqueue = (): Promise<void> => {
-    if (position >= tasks.length) {
-      return Promise.resolve();
+  const results: (T | Promise<T>)[] = [];
+  const queue = [...tasks];
+  
+  const runTask = async (workerIndex: number): Promise<void> => {
+    while (queue.length > 0) {
+      const task = queue.shift();
+      if (task) {
+        const taskIndex = tasks.length - queue.length - 1;
+        try {
+          const result = await task();
+          results[taskIndex] = result;
+        } catch(e) {
+          results[taskIndex] = Promise.reject(e);
+        }
+      }
     }
-    
-    const task = tasks[position++]();
-    const promise = task.then(result => {
-      results.push(result);
-      executing.delete(promise);
-    });
-
-    executing.add(promise);
-    
-    let r: Promise<any> = Promise.resolve();
-    if (executing.size >= limit) {
-      r = Promise.race(executing);
-    }
-    
-    return r.then(() => enqueue());
   };
 
-  return Promise.all(Array(limit).fill(null).map(enqueue)).then(() => results);
+  const workers = Array(limit).fill(null).map((_, i) => runTask(i));
+  await Promise.all(workers);
+  
+  return Promise.all(results);
 }
 
 export async function analyzeResumesAction(
@@ -110,8 +105,9 @@ export async function analyzeResumesAction(
   resumes: Resume[],
   weights: MetricWeights,
   userId: string,
-  files: {filename: string; data: ArrayBuffer}[]
-): Promise<Report> {
+  files: {filename: string; data: ArrayBuffer}[],
+  onAnalysisComplete: (report: Report) => void
+): Promise<void> {
   try {
     if (!jobDescription.trim()) {
       throw new Error('Job description cannot be empty.');
@@ -241,7 +237,7 @@ export async function analyzeResumesAction(
     const finalDoc = await getDoc(reportRef);
     const finalData = finalDoc.data();
 
-    return {
+    const finalReport: Report = {
         id: reportRef.id,
         jobDescription,
         ...initialResult,
@@ -249,6 +245,8 @@ export async function analyzeResumesAction(
         details: allDetails,
         createdAt: (finalData?.createdAt?.toDate() ?? new Date()).toISOString(),
     };
+
+    onAnalysisComplete(finalReport);
 
   } catch (e: any) {
     console.error('Error in analyzeResumesAction:', e);

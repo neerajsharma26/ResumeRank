@@ -36,9 +36,10 @@ const DEFAULT_WEIGHTS: MetricWeights = {
 interface MainPageProps {
   onBack: () => void;
   existingResult?: Report;
+  onAnalysisComplete: (report: Report) => void;
 }
 
-export default function MainPage({ onBack, existingResult }: MainPageProps) {
+export default function MainPage({ onBack, existingResult, onAnalysisComplete }: MainPageProps) {
   const [jobDescription, setJobDescription] = React.useState(existingResult?.jobDescription || '');
   const [jobDescriptionFile, setJobDescriptionFile] = React.useState<File[]>([]);
   const [resumeFiles, setResumeFiles] = React.useState<File[]>([]);
@@ -137,8 +138,7 @@ export default function MainPage({ onBack, existingResult }: MainPageProps) {
           data: await file.arrayBuffer(),
         }))
       );
-      const result = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload);
-      setAnalysisResult(result);
+      await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload, onAnalysisComplete);
     } catch (e: any) {
       console.error(e);
       toast({

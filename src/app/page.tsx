@@ -27,6 +27,11 @@ export default function Home() {
       setSelectedReport(null);
   }
 
+  const handleAnalysisComplete = (report: Report) => {
+    setSelectedReport(report);
+    setShowUploader(false); // Hide uploader view, show report view
+  };
+
   if (loading || !user) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -36,11 +41,11 @@ export default function Home() {
   }
   
   if(selectedReport) {
-    return <MainPage onBack={handleBackToDashboard} existingResult={selectedReport} />;
+    return <MainPage onBack={handleBackToDashboard} existingResult={selectedReport} onAnalysisComplete={handleAnalysisComplete} />;
   }
 
   if (showUploader) {
-      return <MainPage onBack={handleBackToDashboard} />;
+      return <MainPage onBack={handleBackToDashboard} onAnalysisComplete={handleAnalysisComplete} />;
   }
 
   return <Dashboard onNewAnalysis={() => setShowUploader(true)} onViewReport={setSelectedReport} />;
