@@ -38,7 +38,6 @@ import type {
   CandidateStatus,
   AnalysisDetails,
 } from '@/lib/types';
-import { report } from 'process';
 
 export type {
   RankResumesOutput,
