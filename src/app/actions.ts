@@ -38,26 +38,15 @@ import type {
   CandidateStatus,
   AnalysisDetails,
 } from '@/lib/types';
+import { Report } from '@/app/page';
 
 export type {
   RankResumesOutput,
   ParseResumeSkillsOutput,
   MatchKeywordsToResumeOutput,
+  Report
 };
 
-async function rankResumesInBatches(
-  input: RankResumesInput,
-  batchSize = 5
-): Promise<RankResumesOutput> {
-  const allRankedResumes: RankResumesOutput = [];
-  for (let i = 0; i < input.resumes.length; i += batchSize) {
-    const batch = input.resumes.slice(i, i + batchSize);
-    const batchInput = {...input, resumes: batch};
-    const rankedBatch = await retry(() => rankResumesFlow(batchInput));
-    allRankedResumes.push(...rankedBatch);
-  }
-  return allRankedResumes;
-}
 
 async function retry<T>(
   fn: () => Promise<T>,
@@ -70,14 +59,12 @@ async function retry<T>(
       return await fn();
     } catch (e: any) {
       lastError = e;
-      // Only retry on 503 errors, fail fast on others
       if (e.message?.includes('503')) {
         if (i < retries - 1) {
-          console.log(`Attempt ${i + 1} failed. Retrying in ${delay * Math.pow(2, i)}ms...`);
+          console.log(`Attempt ${i + 1} failed with 503. Retrying in ${delay * Math.pow(2, i)}ms...`);
           await new Promise(res => setTimeout(res, delay * Math.pow(2, i)));
         }
       } else {
-        // Don't retry for other errors
         break;
       }
     }
@@ -94,7 +81,6 @@ async function limitConcurrency<T>(
 
   for (const task of tasks) {
     const p: Promise<T> = task().then(result => {
-      // Remove the completed promise from the executing array
       executing.splice(executing.indexOf(promiseWrapper), 1);
       return result;
     });
@@ -118,7 +104,7 @@ export async function analyzeResumesAction(
   weights: MetricWeights,
   userId: string,
   files: {filename: string; data: ArrayBuffer}[]
-): Promise<AnalysisResult & { id: string, createdAt: string }> {
+): Promise<Report> {
   try {
     if (!jobDescription.trim()) {
       throw new Error('Job description cannot be empty.');
@@ -127,53 +113,66 @@ export async function analyzeResumesAction(
       throw new Error('Please select at least one resume to analyze.');
     }
 
-    const detailTasks = resumes.map(
-      (resume, index) => () =>
-        retry(async () => {
-          console.log(`Analyzing resume ${index + 1}/${resumes.length}: ${resume.filename}`);
-          const skillsPromise = parseResumeSkillsFlow({
-            resumeText: resume.content,
-          });
-          const keywordsPromise = matchKeywordsToResumeFlow({
-            resumeText: resume.content,
-            jobDescription,
-          });
-          const [skills, keywords] = await Promise.all([
-            skillsPromise,
-            keywordsPromise,
-          ]);
-           console.log(`Finished analyzing resume ${index + 1}/${resumes.length}: ${resume.filename}`);
-          return {filename: resume.filename, skills, keywords};
-        })
-    );
+    const batchSize = 2;
+    const allRankedResumes: RankResumesOutput = [];
+    const allDetails: AnalysisDetails = {};
 
-    const detailsArray = await limitConcurrency(detailTasks, 2);
+    for (let i = 0; i < resumes.length; i += batchSize) {
+      const resumeBatch = resumes.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(resumes.length / batchSize)}...`);
 
-    const details = detailsArray.reduce((acc, detail) => {
-      acc[detail.filename] = {
-        skills: detail.skills,
-        keywords: detail.keywords,
+      const detailTasks = resumeBatch.map(
+        (resume) => () =>
+          retry(async () => {
+            console.log(`Analyzing resume: ${resume.filename}`);
+            const skillsPromise = parseResumeSkillsFlow({
+              resumeText: resume.content,
+            });
+            const keywordsPromise = matchKeywordsToResumeFlow({
+              resumeText: resume.content,
+              jobDescription,
+            });
+            const [skills, keywords] = await Promise.all([
+              skillsPromise,
+              keywordsPromise,
+            ]);
+            console.log(`Finished analyzing resume: ${resume.filename}`);
+            return {filename: resume.filename, skills, keywords};
+          })
+      );
+
+      const detailsArray = await limitConcurrency(detailTasks, 2);
+
+      const batchDetails = detailsArray.reduce((acc, detail) => {
+        acc[detail.filename] = {
+          skills: detail.skills,
+          keywords: detail.keywords,
+        };
+        return acc;
+      }, {} as AnalysisDetails);
+
+      Object.assign(allDetails, batchDetails);
+
+      const tokenLightResumes = resumeBatch.map(resume => {
+        const detail = batchDetails[resume.filename];
+        const summary = `Top Skills: ${detail.skills.skills.slice(0, 5).join(', ')}. Experience: ${detail.skills.experienceYears} years. Keyword Score: ${detail.keywords.score}. Resume Excerpt: ${resume.content.substring(0, 500)}`;
+        return {
+          filename: resume.filename,
+          content: summary,
+        };
+      });
+
+      const rankInput: RankResumesInput = {
+        resumes: tokenLightResumes,
+        jobDescription,
+        weights,
       };
-      return acc;
-    }, {} as AnalysisDetails);
-
-    const tokenLightResumes = resumes.map(resume => {
-      const detail = details[resume.filename];
-      const summary = `Top Skills: ${detail.skills.skills.slice(0, 5).join(', ')}. Experience: ${detail.skills.experienceYears} years. Keyword Score: ${detail.keywords.score}. Resume Excerpt: ${resume.content.substring(0, 500)}`;
-      return {
-        filename: resume.filename,
-        content: summary,
-      };
-    });
-
-    const rankInput: RankResumesInput = {
-      resumes: tokenLightResumes,
-      jobDescription,
-      weights,
-    };
+      
+      const rankedBatch = await retry(() => rankResumesFlow(rankInput));
+      allRankedResumes.push(...rankedBatch);
+    }
     
-    const rankedResumes = await rankResumesInBatches(rankInput);
-    const sortedRankedResumes = [...rankedResumes].sort((a, b) => b.score - a.score);
+    const sortedRankedResumes = [...allRankedResumes].sort((a, b) => b.score - a.score);
 
     const statuses = sortedRankedResumes.reduce((acc, r) => {
       acc[r.filename] = 'none';
@@ -203,7 +202,7 @@ export async function analyzeResumesAction(
     );
 
     const batch = writeBatch(db);
-    for (const [filename, detailData] of Object.entries(details)) {
+    for (const [filename, detailData] of Object.entries(allDetails)) {
         const detailRef = doc(db, 'users', userId, 'analysisReports', reportRef.id, 'details', filename);
         batch.set(detailRef, detailData);
     }
@@ -235,9 +234,10 @@ export async function analyzeResumesAction(
 
     return {
         id: reportRef.id,
+        jobDescription,
         ...initialResult,
         resumes: initialResult.resumes,
-        details: details,
+        details: allDetails,
         createdAt: (finalData?.createdAt?.toDate() ?? new Date()).toISOString(),
     };
 
@@ -266,7 +266,7 @@ export async function updateAnalysisReportStatus(
 
 export async function getAnalysisReports(
   userId: string
-): Promise<(AnalysisResult & {id: string; jobDescription: string; createdAt: string})[]> {
+): Promise<Report[]> {
   try {
     if (!userId) {
       throw new Error('User not authenticated');
