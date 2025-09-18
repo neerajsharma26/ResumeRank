@@ -65,6 +65,7 @@ async function retry<T>(
           await new Promise(res => setTimeout(res, delay * Math.pow(2, i)));
         }
       } else {
+        // Don't retry on non-503 errors
         break;
       }
     }
@@ -76,37 +77,42 @@ async function limitConcurrency<T>(
   tasks: (() => Promise<T>)[],
   limit: number
 ): Promise<T[]> {
-  const results: PromiseSettledResult<T>[] = [];
+  const results: T[] = [];
+  const active: Promise<void>[] = [];
   let taskIndex = 0;
 
-  const runTask = async (): Promise<void> => {
-    while (taskIndex < tasks.length) {
-      const currentIndex = taskIndex++;
-      const task = tasks[currentIndex];
+  const enqueue = (): Promise<void> | void => {
+    if (taskIndex === tasks.length) {
+      return;
+    }
+    const task = tasks[taskIndex]!;
+    const currentIndex = taskIndex;
+    taskIndex++;
+    
+    const promise = task().then(result => {
+      results[currentIndex] = result;
+    });
 
-      if (task) {
-        try {
-          const result = await task();
-          results[currentIndex] = { status: 'fulfilled', value: result };
-        } catch (error) {
-          results[currentIndex] = { status: 'rejected', reason: error };
+    const worker: Promise<void> = promise.then(() => {
+        const index = active.indexOf(worker);
+        if (index > -1) {
+            active.splice(index, 1);
         }
-      }
-    }
+        return enqueue();
+    });
+    
+    active.push(worker);
   };
-
-  const workers = Array(limit).fill(null).map(() => runTask());
-  await Promise.all(workers);
   
-  return results.map(result => {
-    if (result.status === 'fulfilled') {
-      return result.value;
-    }
-    // The retry logic within the task should handle transient errors,
-    // so if we get here, it's likely a persistent failure. We throw
-    // to stop the entire analysis if one resume detail fails processing.
-    throw result.reason; 
-  });
+  const initialActives: (Promise<void> | void)[] = [];
+  for (let i = 0; i < Math.min(limit, tasks.length); i++) {
+    initialActives.push(enqueue());
+  }
+
+  await Promise.all(initialActives);
+  await Promise.all(active);
+  
+  return results;
 }
 
 export async function analyzeResumesAction(
@@ -233,7 +239,7 @@ export async function analyzeResumesAction(
           r => r.filename === file.filename
         );
         if (resumeIndex !== -1) {
-          initialResult.resumes[resumeIndex].url = downloadURL;
+          (initialResult.resumes[resumeIndex] as any).url = downloadURL;
         }
     });
     
