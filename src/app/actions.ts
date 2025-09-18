@@ -53,6 +53,7 @@ async function retry<T>(fn: () => Promise<T>): Promise<T> {
       return await fn();
     } catch (e: any) {
       lastError = e;
+      // Check for specific rate limit or temporary server error status codes
       if (e.message?.includes('429') || e.message?.includes('503')) {
          if (i < 4) { // Only delay if it's not the last attempt
           const delay = 2000 * Math.pow(2, i); // Exponential backoff
