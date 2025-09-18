@@ -76,31 +76,33 @@ async function limitConcurrency<T>(
   tasks: (() => Promise<T>)[],
   limit: number
 ): Promise<T[]> {
-    const results: T[] = [];
-    const executing = new Set<Promise<any>>();
-    const taskQueue = [...tasks];
+  const results: T[] = [];
+  const executing = new Set<Promise<any>>();
+  const taskQueue = [...tasks];
+  let position = 0;
 
-    const runTask = async (task: () => Promise<T>): Promise<void> => {
-        const promise = task().then(result => {
-            results.push(result);
-        });
-
-        executing.add(promise);
-        await promise;
-        executing.delete(promise);
-    };
-
-    while (taskQueue.length > 0) {
-        while (executing.size < limit && taskQueue.length > 0) {
-            runTask(taskQueue.shift()!);
-        }
-        if (executing.size > 0) {
-            await Promise.race(executing);
-        }
+  const enqueue = (): Promise<void> => {
+    if (position >= tasks.length) {
+      return Promise.resolve();
     }
+    
+    const task = tasks[position++]();
+    const promise = task.then(result => {
+      results.push(result);
+      executing.delete(promise);
+    });
 
-    await Promise.all(executing);
-    return results;
+    executing.add(promise);
+    
+    let r: Promise<any> = Promise.resolve();
+    if (executing.size >= limit) {
+      r = Promise.race(executing);
+    }
+    
+    return r.then(() => enqueue());
+  };
+
+  return Promise.all(Array(limit).fill(null).map(enqueue)).then(() => results);
 }
 
 export async function analyzeResumesAction(
