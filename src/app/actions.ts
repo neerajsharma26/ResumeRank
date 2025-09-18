@@ -84,31 +84,38 @@ export async function analyzeResumesAction(
       throw new Error('Please select at least one resume to analyze.');
     }
 
-    const detailPromises = resumes.map(async (resume) => {
-        console.log(`Analyzing resume: ${resume.filename}`);
-        const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content }));
-        const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
+    const allDetails: AnalysisDetails = {};
+    const batchSize = 2;
 
-        const [skills, keywords] = await Promise.all([
-          skillsPromise,
-          keywordsPromise,
-        ]);
+    for (let i = 0; i < resumes.length; i += batchSize) {
+        const batch = resumes.slice(i, i + batchSize);
+        console.log(`Processing batch ${i / batchSize + 1}...`);
+        
+        const detailPromises = batch.map(async (resume) => {
+            console.log(`Analyzing resume: ${resume.filename}`);
+            const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content }));
+            const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
 
-        console.log(`Finished analyzing resume: ${resume.filename}`);
-        return {filename: resume.filename, skills, keywords};
-    });
+            const [skills, keywords] = await Promise.all([
+              skillsPromise,
+              keywordsPromise,
+            ]);
 
-    const detailsArray = await Promise.all(detailPromises);
+            console.log(`Finished analyzing resume: ${resume.filename}`);
+            return {filename: resume.filename, skills, keywords};
+        });
 
-    const allDetails = detailsArray.reduce((acc, detail) => {
-      if(detail) {
-        acc[detail.filename] = {
-          skills: detail.skills,
-          keywords: detail.keywords,
-        };
-      }
-      return acc;
-    }, {} as AnalysisDetails);
+        const batchDetails = await Promise.all(detailPromises);
+        
+        for (const detail of batchDetails) {
+          if (detail) {
+            allDetails[detail.filename] = {
+              skills: detail.skills,
+              keywords: detail.keywords,
+            };
+          }
+        }
+    }
 
     const tokenLightResumes = resumes.map(resume => {
       const detail = allDetails[resume.filename];
