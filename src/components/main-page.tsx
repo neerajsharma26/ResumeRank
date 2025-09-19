@@ -3,20 +3,24 @@
 import * as React from 'react';
 import { analyzeResumesAction, Report } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-import type { AnalysisResult, Resume, MetricWeights } from '@/lib/types';
+import type { AnalysisResult, Resume, MetricWeights, CandidateStatus } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import type * as PdfJs from 'pdfjs-dist';
 
 import Header from '@/components/layout/header';
-import ResultsView from '@/components/results-view';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Sparkles, ArrowLeft, Upload, FileText, X, CheckCircle, Sliders, Play } from 'lucide-react';
+import { Loader2, Sparkles, ArrowLeft, Upload, FileText, X, CheckCircle, Sliders, Play, Briefcase, Calendar, Clock, Users, Eye, Replace, FileX, MoreVertical, Trash2, Check, Inbox } from 'lucide-react';
 import { ComparisonModal } from './comparison-modal';
 import { ResumeViewerModal } from './resume-viewer-modal';
 import { WeightSliders } from './weight-sliders';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { formatDistanceToNow } from 'date-fns';
+import { Checkbox } from './ui/checkbox';
+import CandidateCard from './candidate-card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import { updateAnalysisReportStatus } from '@/app/actions';
 
 const pdfjsLibPromise = import('pdfjs-dist');
 let pdfjsLib: typeof PdfJs | null = null;
@@ -39,6 +43,19 @@ interface MainPageProps {
   onAnalysisComplete: (report: Report) => void;
 }
 
+const EmptyState = ({isFiltered = false}: {isFiltered?: boolean}) => (
+  <Card className="flex items-center justify-center min-h-[40vh] shadow-none border-dashed">
+    <div className="text-center text-muted-foreground">
+      {isFiltered ? <Inbox className="mx-auto h-12 w-12" /> : <Users className="mx-auto h-12 w-12" />}
+      <h3 className="mt-4 text-lg font-semibold">{isFiltered ? "No Candidates Found" : "Ready for Analysis"}</h3>
+      <p className="mt-2 text-sm max-w-xs mx-auto">
+        {isFiltered ? "There are no candidates matching the current filters." : "Your ranked candidates will appear here once the analysis is complete."}
+      </p>
+    </div>
+  </Card>
+);
+
+
 export default function MainPage({ onBack, existingResult, onAnalysisComplete }: MainPageProps) {
   const [jobDescription, setJobDescription] = React.useState(existingResult?.jobDescription || '');
   const [jobDescriptionFile, setJobDescriptionFile] = React.useState<File[]>([]);
@@ -60,9 +77,35 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
 
   const { toast } = useToast();
   const { user } = useAuth();
+  
+  const [selectedForCompare, setSelectedForCompare] = React.useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = React.useState<"all" | "shortlisted" | "rejected">('all');
+  const [candidateStatuses, setCandidateStatuses] = React.useState<Record<string, CandidateStatus>>({});
 
   const isViewingPastReport = !!existingResult;
   const analysisResult = existingResult;
+
+  React.useEffect(() => {
+    setSelectedForCompare(new Set());
+    if (analysisResult) {
+        setCandidateStatuses(analysisResult.statuses || {});
+    }
+  }, [analysisResult]);
+  
+  const handleStatusChange = async (filename: string, status: CandidateStatus) => {
+      const newStatuses = { ...candidateStatuses, [filename]: status };
+      setCandidateStatuses(newStatuses);
+
+      if (analysisResult?.id && user?.uid) {
+          try {
+              await updateAnalysisReportStatus(user.uid, analysisResult.id, newStatuses);
+          } catch(e: any) {
+              toast({ title: 'Error Saving Status', description: e.message, variant: 'destructive' });
+              // Revert state if API call fails
+              setCandidateStatuses(candidateStatuses);
+          }
+      }
+  }
   
   const fileToText = async (file: File): Promise<string> => {
     if (!pdfjsLib) {
@@ -138,11 +181,12 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
     try {
       const resumes = await Promise.all(resumeFiles.map(fileToResume));
       const filesForUpload = await Promise.all(
-        resumeFiles.map(async (file) => ({
+        [...resumeFiles, ...jobDescriptionFile].map(async (file) => ({
           filename: file.name,
           data: await file.arrayBuffer(),
         }))
       );
+
       const report = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload);
       onAnalysisComplete(report);
     } catch (e: any) {
@@ -192,7 +236,8 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
       return;
     }
     const newFiles = Array.from(files).filter(file => {
-      if (!['application/pdf', 'text/plain'].includes(file.type)) {
+      const allowedTypes = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'];
+      if (!allowedTypes.includes(file.type)) {
         toast({ title: 'Invalid File Type', description: `${file.name} is not a supported file type.`, variant: 'destructive'});
         return false;
       }
@@ -209,8 +254,9 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   const handleJdUpload = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
-     if (!['application/pdf', 'text/plain'].includes(file.type)) {
-        toast({ title: 'Invalid File Type', description: `Only PDF or TXT files are allowed for the job description.`, variant: 'destructive'});
+     const allowedTypes = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'];
+     if (!allowedTypes.includes(file.type)) {
+        toast({ title: 'Invalid File Type', description: `Only PDF, TXT, or DOC/DOCX files are allowed for the job description.`, variant: 'destructive'});
         return;
       }
       if (file.size > 3 * 1024 * 1024) {
@@ -229,6 +275,28 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   };
 
   const canAnalyze = !isLoading && resumeFiles.length > 0 && (jobDescriptionFile.length > 0 || jobDescription.trim().length > 0);
+  
+  const filteredResumes = React.useMemo(() => {
+    if (!analysisResult) return [];
+    if (activeTab === 'all') return analysisResult.rankedResumes;
+    return analysisResult.rankedResumes.filter(r => candidateStatuses[r.filename] === activeTab);
+  }, [analysisResult, activeTab, candidateStatuses]);
+
+  const handleCompareSelect = (filename: string, isSelected: boolean) => {
+    const newSelectionSet = new Set(selectedForCompare);
+    if (isSelected) {
+      if (newSelectionSet.size < 3) {
+        newSelectionSet.add(filename);
+      } else {
+        toast({ title: 'Comparison Limit', description: 'You can only compare up to 3 candidates at a time.', variant: 'destructive'})
+      }
+    } else {
+      newSelectionSet.delete(filename);
+    }
+    setSelectedForCompare(newSelectionSet);
+  };
+  
+  const jdFile = analysisResult?.resumes.find(r => r.filename === (jobDescriptionFile[0]?.name));
 
 
   return (
@@ -236,25 +304,116 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
       <Header />
       <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-8">
         
-        {isViewingPastReport ? (
-           <div className={isViewingPastReport ? 'lg:col-span-3' : 'lg:col-span-2'}>
-            <div className="mb-8">
-              <Button variant="ghost" onClick={onBack} className="mb-4">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Dashboard
-              </Button>
-              <h1 className="text-4xl font-bold tracking-tight text-slate-900">Analysis Report</h1>
-              <p className="mt-2 text-lg text-slate-600">Reviewing a previously generated analysis report.</p>
+        {isViewingPastReport && analysisResult ? (
+          <div className="space-y-8">
+            <Button variant="ghost" onClick={onBack} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Dashboard
+            </Button>
+             <div className="text-center mb-6">
+              <h2 className="text-2xl font-semibold text-black mb-2 font-['Bitter']">
+                {analysisResult.jobDescription.split('\n')[0] || "Analysis Report"}
+              </h2>
+              <div className="flex items-center justify-center gap-4 text-sm text-gray-500 mt-4">
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-4 h-4" />
+                  Created {formatDistanceToNow(new Date(analysisResult.createdAt), { addSuffix: true })}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" />
+                  Last updated {formatDistanceToNow(new Date(analysisResult.createdAt), { addSuffix: true })}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Users className="w-4 h-4" />
+                  {analysisResult.resumes.length} candidates
+                </span>
+              </div>
             </div>
-            <ResultsView 
-              result={analysisResult} 
-              isLoading={isLoading} 
-              onCompare={handleComparison}
-              onView={handleView}
-              jobDescriptionName={jobDescriptionFile[0]?.name || (jobDescription ? (jobDescription.substring(0, 50) + (jobDescription.length > 50 ? '...' : '')) : undefined)}
-              isViewingPastReport={isViewingPastReport}
-              reportId={existingResult?.id}
-            />
+
+            <Card className="bg-white shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Briefcase className="w-5 h-5" />
+                    Job Description
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {jdFile ? (
+                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <FileText className="w-6 h-6 text-blue-600" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-800">
+                              {jdFile.filename}
+                            </h4>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                           <a href={jdFile.url} target="_blank" rel="noopener noreferrer">
+                              <Button variant="outline" size="sm">
+                                <Eye className="w-4 h-4 mr-2" />
+                                View
+                              </Button>
+                           </a>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans max-h-48 overflow-y-auto">
+                        {analysisResult.jobDescription}
+                      </pre>
+                    </div>
+                  )}
+                </CardContent>
+            </Card>
+            
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "all" | "shortlisted" | "rejected")}>
+              <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-semibold text-gray-800">
+                    Candidate Results ({filteredResumes.length})
+                  </h3>
+                  <TabsList>
+                      <TabsTrigger value="all">All</TabsTrigger>
+                      <TabsTrigger value="shortlisted">Shortlisted</TabsTrigger>
+                      <TabsTrigger value="rejected">Rejected</TabsTrigger>
+                  </TabsList>
+              </div>
+              <TabsContent value={activeTab}>
+                {isLoading && <p>Loading...</p>}
+                {!isLoading && filteredResumes.length === 0 && <EmptyState isFiltered />}
+                {!isLoading && filteredResumes.length > 0 && (
+                  <div className="space-y-4">
+                  {filteredResumes.map((rankedResume) => (
+                      <div key={rankedResume.filename} className="flex items-center gap-4">
+                          <Checkbox
+                              id={`compare-${rankedResume.filename}`}
+                              checked={selectedForCompare.has(rankedResume.filename)}
+                              onCheckedChange={(checked) => handleCompareSelect(rankedResume.filename, !!checked)}
+                              disabled={selectedForCompare.size >= 3 && !selectedForCompare.has(rankedResume.filename)}
+                          />
+                          <div className="flex-1">
+                              <CandidateCard
+                                  rank={analysisResult.rankedResumes.findIndex(r => r.filename === rankedResume.filename) + 1}
+                                  rankedResume={rankedResume}
+                                  details={analysisResult.details[rankedResume.filename]}
+                                  status={candidateStatuses[rankedResume.filename] || 'none'}
+                                  onStatusChange={(newStatus) => handleStatusChange(rankedResume.filename, newStatus)}
+                              />
+                          </div>
+                           <Button variant="ghost" size="icon" onClick={() => handleView(rankedResume.filename)}>
+                              <Eye className="h-5 w-5" />
+                          </Button>
+                      </div>
+                  ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         ) : (
           <>
@@ -285,7 +444,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
                      Upload Resumes
                    </CardTitle>
                    <CardDescription className="text-gray-700">
-                     Upload up to 15 PDF or TXT files (max 3MB each)
+                     Upload up to 15 PDF, TXT or DOC/DOCX files (max 3MB each)
                    </CardDescription>
                  </CardHeader>
                  <CardContent className="p-6 space-y-4">
@@ -305,13 +464,13 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
                        Drop files here or click to browse
                      </p>
                      <p className="text-xs text-gray-500">
-                       PDF or TXT, up to 3MB each
+                       PDF, TXT, DOC/DOCX up to 3MB each
                      </p>
                      <input
                        ref={resumeFileInputRef}
                        type="file"
                        multiple
-                       accept=".pdf,.txt"
+                       accept=".pdf,.txt,.doc,.docx"
                        className="hidden"
                        onChange={(e) => handleResumeUpload(e.target.files)}
                      />
@@ -387,12 +546,12 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
                          Drop JD file here or click to browse
                        </p>
                        <p className="text-xs text-gray-500">
-                         PDF or TXT, max 3MB
+                         PDF, TXT, DOC/DOCX, max 3MB
                        </p>
                        <input
                          ref={jdFileInputRef}
                          type="file"
-                         accept=".pdf,.txt"
+                         accept=".pdf,.txt,.doc,.docx"
                          className="hidden"
                          onChange={(e) => handleJdUpload(e.target.files)}
                        />
