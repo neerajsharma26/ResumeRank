@@ -37,8 +37,10 @@ export function useAuth(): AuthContextType {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
+      // No need to set loading to false here, finally block will handle it.
     } catch (error) {
       console.error('Error signing in with Google:', error);
+      // No need to set loading to false here, finally block will handle it.
     } finally {
       setLoading(false);
     }
