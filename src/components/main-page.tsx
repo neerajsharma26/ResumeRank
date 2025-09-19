@@ -11,11 +11,12 @@ import Header from '@/components/layout/header';
 import ResultsView from '@/components/results-view';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Sparkles, ArrowLeft } from 'lucide-react';
-import { FileUpload } from './file-upload';
+import { Loader2, Sparkles, ArrowLeft, Upload, FileText, X, CheckCircle, Sliders, Play } from 'lucide-react';
 import { ComparisonModal } from './comparison-modal';
 import { ResumeViewerModal } from './resume-viewer-modal';
 import { WeightSliders } from './weight-sliders';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 const pdfjsLibPromise = import('pdfjs-dist');
 let pdfjsLib: typeof PdfJs | null = null;
@@ -50,6 +51,12 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
 
   const [isViewerOpen, setIsViewerOpen] = React.useState(false);
   const [viewingIndex, setViewingIndex] = React.useState(0);
+  
+  const [isDragOver, setIsDragOver] = React.useState(false);
+  const [isJdDragOver, setIsJdDragOver] = React.useState(false);
+  const resumeFileInputRef = React.useRef<HTMLInputElement>(null);
+  const jdFileInputRef = React.useRef<HTMLInputElement>(null);
+
 
   const { toast } = useToast();
   const { user } = useAuth();
@@ -170,109 +177,75 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   const currentResume = analysisResult?.resumes.find(r => r.filename === currentRankedResult?.filename);
   const currentFile = isViewingPastReport ? null : (currentRankedResult ? resumeFiles.find(f => f.name === currentRankedResult.filename) || null : null);
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const handleResumeUpload = (files: FileList | null) => {
+    if (!files) return;
+    if (resumeFiles.length + files.length > 15) {
+      toast({ title: 'Upload Limit Exceeded', description: 'You can upload a maximum of 15 resume files.', variant: 'destructive'});
+      return;
+    }
+    const newFiles = Array.from(files).filter(file => {
+      if (!['application/pdf', 'text/plain'].includes(file.type)) {
+        toast({ title: 'Invalid File Type', description: `${file.name} is not a supported file type.`, variant: 'destructive'});
+        return false;
+      }
+      if (file.size > 3 * 1024 * 1024) {
+        toast({ title: 'File Too Large', description: `${file.name} is larger than 3MB.`, variant: 'destructive'});
+        return false;
+      }
+      return true;
+    });
+
+    setResumeFiles(prev => [...prev, ...newFiles]);
+  };
+
+  const handleJdUpload = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+     if (!['application/pdf', 'text/plain'].includes(file.type)) {
+        toast({ title: 'Invalid File Type', description: `Only PDF or TXT files are allowed for the job description.`, variant: 'destructive'});
+        return;
+      }
+      if (file.size > 3 * 1024 * 1024) {
+        toast({ title: 'File Too Large', description: `Job description file must be smaller than 3MB.`, variant: 'destructive'});
+        return;
+      }
+    setJobDescriptionFile([file]);
+  };
+  
+  const removeResumeFile = (index: number) => {
+    setResumeFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeJdFile = () => {
+    setJobDescriptionFile([]);
+  };
+
+  const canAnalyze = !isLoading && resumeFiles.length > 0 && (jobDescriptionFile.length > 0 || jobDescription.trim().length > 0);
+
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
       <Header />
       <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-8">
-        <div className="mb-8">
-            <Button variant="ghost" onClick={onBack} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Dashboard
-            </Button>
-            <h1 className="text-4xl font-bold tracking-tight text-slate-900">
-             {isViewingPastReport ? 'Analysis Report' : 'AI Resume Analysis'}
-            </h1>
-            <p className="mt-2 text-lg text-slate-600">
-              {isViewingPastReport
-                ? 'Reviewing a previously generated analysis report.'
-                : 'Upload a job description and resumes to get an AI-powered analysis and ranking.'
-              }
-            </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          {!isViewingPastReport && (
-            <div className="lg:col-span-1 flex flex-col gap-8">
-              <Card>
-                  <CardHeader>
-                      <CardTitle>1. Job Description</CardTitle>
-                      <CardDescription>Upload a file or paste the text.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                      <FileUpload 
-                          title=""
-                          description=""
-                          onFilesChange={setJobDescriptionFile}
-                          acceptedFiles=".pdf,.txt"
-                          isMultiple={false}
-                          files={jobDescriptionFile}
-                          disabled={isLoading}
-                      />
-                      <div className="flex items-center">
-                        <div className="flex-grow border-t border-gray-300"></div>
-                        <span className="flex-shrink mx-4 text-gray-500 text-sm">OR</span>
-                        <div className="flex-grow border-t border-gray-300"></div>
-                      </div>
-                      <textarea
-                        value={jobDescription}
-                        onChange={(e) => setJobDescription(e.target.value)}
-                        placeholder="Paste job description here..."
-                        className="w-full p-2 border rounded-md min-h-[150px] text-sm"
-                        disabled={isLoading}
-                      />
-                  </CardContent>
-              </Card>
-
-              <Card>
-                  <CardHeader>
-                      <CardTitle>2. Upload Resumes</CardTitle>
-                      <CardDescription>Select up to 15 PDF or TXT files.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                      <FileUpload
-                        title=""
-                        description=""
-                        onFilesChange={setResumeFiles}
-                        acceptedFiles=".pdf,.txt"
-                        isMultiple={true}
-                        files={resumeFiles}
-                        disabled={isLoading}
-                      />
-                  </CardContent>
-              </Card>
-
-              <WeightSliders 
-                weights={weights}
-                onWeightsChange={setWeights}
-                disabled={isLoading}
-              />
-
-              <Card>
-                  <CardHeader>
-                      <CardTitle>3. Start Analysis</CardTitle>
-                      <CardDescription>Click the button to rank the resumes.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                      <Button onClick={handleAnalyze} disabled={isLoading || resumeFiles.length === 0} className="w-full" size="lg">
-                        {isLoading ? (
-                          <>
-                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                            Analyzing...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="mr-2 h-5 w-5" />
-                            Rank Resumes
-                          </>
-                        )}
-                      </Button>
-                  </CardContent>
-              </Card>
+        
+        {isViewingPastReport ? (
+           <div className={isViewingPastReport ? 'lg:col-span-3' : 'lg:col-span-2'}>
+            <div className="mb-8">
+              <Button variant="ghost" onClick={onBack} className="mb-4">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Dashboard
+              </Button>
+              <h1 className="text-4xl font-bold tracking-tight text-slate-900">Analysis Report</h1>
+              <p className="mt-2 text-lg text-slate-600">Reviewing a previously generated analysis report.</p>
             </div>
-          )}
-
-          <div className={isViewingPastReport ? 'lg:col-span-3' : 'lg:col-span-2'}>
             <ResultsView 
               result={analysisResult} 
               isLoading={isLoading} 
@@ -283,7 +256,231 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
               reportId={existingResult?.id}
             />
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 text-sm text-gray-600 mb-8">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={onBack}
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-800"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Dashboard
+              </Button>
+            </div>
+
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-semibold text-black mb-2 font-['Bitter']">Upload & Configure Analysis</h2>
+              <p className="text-lg text-gray-600 mb-4">
+                Upload resumes and configure your analysis settings
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+               <Card className="bg-[rgba(194,194,235,0.1)] shadow-sm">
+                 <CardHeader className="bg-[rgba(194,194,235,1)]">
+                   <CardTitle className="flex items-center gap-2">
+                     <Upload className="w-5 h-5 text-blue-600" />
+                     Upload Resumes
+                   </CardTitle>
+                   <CardDescription className="text-gray-700">
+                     Upload up to 15 PDF or TXT files (max 3MB each)
+                   </CardDescription>
+                 </CardHeader>
+                 <CardContent className="p-6 space-y-4">
+                   <div
+                     className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 cursor-pointer ${
+                       isDragOver 
+                         ? 'border-blue-400 bg-blue-50' 
+                         : 'border-gray-300 hover:border-gray-400'
+                     }`}
+                     onDrop={(e) => { e.preventDefault(); setIsDragOver(false); handleResumeUpload(e.dataTransfer.files); }}
+                     onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                     onDragLeave={() => setIsDragOver(false)}
+                     onClick={() => resumeFileInputRef.current?.click()}
+                   >
+                     <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                     <p className="text-sm font-medium text-gray-700 mb-1">
+                       Drop files here or click to browse
+                     </p>
+                     <p className="text-xs text-gray-500">
+                       PDF or TXT, up to 3MB each
+                     </p>
+                     <input
+                       ref={resumeFileInputRef}
+                       type="file"
+                       multiple
+                       accept=".pdf,.txt"
+                       className="hidden"
+                       onChange={(e) => handleResumeUpload(e.target.files)}
+                     />
+                   </div>
+
+                   <div className="flex items-center justify-between text-sm">
+                     <span className="text-gray-600">Files uploaded:</span>
+                     <span className={`font-medium ${resumeFiles.length > 15 ? 'text-red-600' : 'text-gray-800'}`}>
+                       {resumeFiles.length}/15
+                     </span>
+                   </div>
+
+                   {resumeFiles.length > 0 && (
+                     <div className="space-y-2 max-h-64 overflow-y-auto p-1">
+                       {resumeFiles.map((file, index) => (
+                         <div
+                           key={`${file.name}-${index}`}
+                           className="flex items-center justify-between p-3 bg-gray-50 rounded-lg text-sm"
+                         >
+                           <div className="flex items-center gap-2 flex-1 min-w-0">
+                             <FileText className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                             <div className="min-w-0 flex-1">
+                               <p className="font-medium text-gray-800 truncate">{file.name}</p>
+                               <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                             </div>
+                           </div>
+                           <div className="flex items-center gap-2 ml-2">
+                             <CheckCircle className="w-4 h-4 text-green-600" />
+                             <Button
+                               variant="ghost"
+                               size="sm"
+                               onClick={() => removeResumeFile(index)}
+                               className="h-6 w-6 p-0 text-gray-400 hover:text-red-500"
+                             >
+                               <X className="w-3 h-3" />
+                             </Button>
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                   )}
+                 </CardContent>
+               </Card>
+
+               <Card className="bg-[rgba(194,194,235,0.1)] shadow-sm">
+                 <CardHeader className="bg-[rgba(194,194,235,1)]">
+                   <CardTitle className="flex items-center gap-2">
+                     <FileText className="w-5 h-5 text-green-600" />
+                     Job Description
+                   </CardTitle>
+                   <CardDescription className="text-gray-700">
+                     Upload JD file or enter text below
+                   </CardDescription>
+                 </CardHeader>
+                 <CardContent className="p-6 space-y-4">
+                   <div>
+                     <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                       Upload JD File (Optional)
+                     </Label>
+                     <div
+                       className={`border-2 border-dashed rounded-lg p-4 text-center transition-all duration-200 cursor-pointer ${
+                         isJdDragOver 
+                           ? 'border-green-400 bg-green-50' 
+                           : 'border-gray-300 hover:border-gray-400'
+                       }`}
+                       onDrop={(e) => { e.preventDefault(); setIsJdDragOver(false); handleJdUpload(e.dataTransfer.files);}}
+                       onDragOver={(e) => { e.preventDefault(); setIsJdDragOver(true); }}
+                       onDragLeave={() => setIsJdDragOver(false)}
+                       onClick={() => jdFileInputRef.current?.click()}
+                     >
+                       <FileText className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                       <p className="text-sm font-medium text-gray-700 mb-1">
+                         Drop JD file here or click to browse
+                       </p>
+                       <p className="text-xs text-gray-500">
+                         PDF or TXT, max 3MB
+                       </p>
+                       <input
+                         ref={jdFileInputRef}
+                         type="file"
+                         accept=".pdf,.txt"
+                         className="hidden"
+                         onChange={(e) => handleJdUpload(e.target.files)}
+                       />
+                     </div>
+                   </div>
+
+                   {jobDescriptionFile.length > 0 && (
+                     <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                       <div className="flex items-center gap-2 flex-1 min-w-0">
+                         <FileText className="w-4 h-4 text-green-600 flex-shrink-0" />
+                         <div className="min-w-0 flex-1">
+                           <p className="font-medium text-gray-800 truncate text-sm">{jobDescriptionFile[0].name}</p>
+                           <p className="text-xs text-gray-500">{formatFileSize(jobDescriptionFile[0].size)}</p>
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-2 ml-2">
+                         <CheckCircle className="w-4 h-4 text-green-600" />
+                         <Button
+                           variant="ghost"
+                           size="sm"
+                           onClick={removeJdFile}
+                           className="h-6 w-6 p-0 text-gray-400 hover:text-red-500"
+                         >
+                           <X className="w-3 h-3" />
+                         </Button>
+                       </div>
+                     </div>
+                   )}
+
+                   <div>
+                     <Label htmlFor="jd-text" className="text-sm font-medium text-gray-700 mb-2 block">
+                       Or Enter Job Description Text
+                     </Label>
+                     <Textarea
+                       id="jd-text"
+                       placeholder="Enter the job description, requirements, and qualifications..."
+                       value={jobDescription}
+                       onChange={(e) => setJobDescription(e.target.value)}
+                       rows={8}
+                       className="resize-none"
+                       disabled={isLoading}
+                     />
+                   </div>
+                 </CardContent>
+               </Card>
+
+              <Card className="bg-[rgba(194,194,235,0.05)] shadow-sm">
+                <CardHeader className="bg-[rgba(194,194,235,0.92)]">
+                  <CardTitle className="flex items-center gap-2">
+                    <Sliders className="w-5 h-5 text-purple-600" />
+                    Scoring Weights
+                  </CardTitle>
+                  <CardDescription className="text-gray-700">
+                    Adjust the importance of each metric.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6 p-6 bg-[rgba(194,194,235,0.1)]">
+                   <WeightSliders 
+                      weights={weights}
+                      onWeightsChange={setWeights}
+                      disabled={isLoading}
+                    />
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex justify-center">
+              <Button 
+                onClick={handleAnalyze}
+                disabled={!canAnalyze}
+                size="lg"
+                className="h-14 px-12 bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed text-lg"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 mr-3" />
+                    Analyze Resumes
+                  </>
+                )}
+              </Button>
+            </div>
+          </>
+        )}
       </main>
 
       {analysisResult && isComparisonModalOpen && (

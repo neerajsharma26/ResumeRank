@@ -9,37 +9,37 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Logo } from '@/components/logo';
 import Image from 'next/image';
 
 export default function Header() {
   const { user, logout } = useAuth();
 
   return (
-    <header className="bg-card border-b sticky top-0 z-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-        <div className="flex items-center justify-between h-16">
-          <div className="flex items-center space-x-3">
-            <div className="h-8 w-8">
-              <Image src="/images/varahe-logo.png" alt="Hire Varahe Logo" width={32} height={32} />
+    <header className="bg-white shadow-sm border-b sticky top-0 z-10 px-8 py-4">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 flex items-center justify-center">
+              <Image src="/images/varahe-logo.png" alt="Hire Varahe Logo" width={40} height={40} />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Hire Varahe</h1>
+            <h1 className="text-3xl font-semibold text-black font-['Bitter']">Hire Varahe</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <p className="text-sm text-muted-foreground hidden md:block">
-              AI-Powered Resume Analysis and Ranking
-            </p>
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                    <Avatar className="h-9 w-9">
+                  <Button variant="ghost" className="relative h-12 w-12 rounded-full">
+                    <Avatar className="h-10 w-10">
                       <AvatarImage src={user.photoURL ?? ''} alt={user.displayName ?? 'User'} />
                       <AvatarFallback>{user.displayName?.charAt(0)}</AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end" forceMount>
+                   <div className="flex flex-col space-y-1 p-2">
+                    <p className="text-sm font-medium leading-none">{user.displayName}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                  </div>
                   <DropdownMenuItem onClick={() => logout()}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
