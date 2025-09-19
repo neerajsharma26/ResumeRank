@@ -1,11 +1,12 @@
 'use client';
 
-import {useState, useEffect, createContext, useContext} from 'react';
+import {useState, useEffect} from 'react';
 import {
   getAuth,
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   User,
 } from 'firebase/auth';
@@ -26,8 +27,24 @@ export function useAuth(): AuthContextType {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
+      if (user) {
+        setUser(user);
+        setLoading(false);
+      } else {
+         // Check for redirect result when the app initializes
+        getRedirectResult(auth)
+          .then((result) => {
+            if (result?.user) {
+              setUser(result.user);
+            }
+          })
+          .catch((error) => {
+            console.error('Error getting redirect result:', error);
+          })
+          .finally(() => {
+            setLoading(false);
+          });
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -36,12 +53,11 @@ export function useAuth(): AuthContextType {
     setLoading(true);
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      // No need to set loading to false here, finally block will handle it.
+      await signInWithRedirect(auth, provider);
+      // The user will be redirected, so the rest of the code in this block may not execute
+      // until they return to the app. The onAuthStateChanged listener will handle the result.
     } catch (error) {
-      console.error('Error signing in with Google:', error);
-      // No need to set loading to false here, finally block will handle it.
-    } finally {
+      console.error('Error initiating sign in with redirect:', error);
       setLoading(false);
     }
   };
@@ -50,6 +66,7 @@ export function useAuth(): AuthContextType {
     setLoading(true);
     try {
       await signOut(auth);
+      setUser(null); // Explicitly set user to null on logout
     } catch (error) {
       console.error('Error signing out:', error);
     } finally {

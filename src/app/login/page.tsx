@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Chrome } from 'lucide-react';
+import { Chrome, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useEffect } from 'react';
 import { Logo } from '@/components/logo';
@@ -23,6 +23,16 @@ export default function LoginPage() {
     await signInWithGoogle();
   };
 
+  // Show a loading indicator while the redirect is being processed
+  if (loading) {
+     return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">Authenticating...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background">
       <Card className="mx-auto w-full max-w-md shadow-lg">
@@ -37,10 +47,10 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col space-y-4">
-            <Button onClick={handleSignIn} className="w-full" size="lg" disabled={loading}>
+            <Button onClick={handleSignIn} className="w-full" size="lg">
               <>
                 <Chrome className="mr-2 h-5 w-5" />
-                {loading ? 'Signing In...' : 'Sign In with Google'}
+                Sign In with Google
               </>
             </Button>
           </div>
