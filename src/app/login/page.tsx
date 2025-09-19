@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { BarChart3, LayoutDashboard, Loader2, Upload, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Image from 'next/image';
 
 const logoUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAyVJREFUeF7tmu1tFEEQhD2sEgFQgVABUAFQgVABUAFQAVABUAFQAVABUAFQAVRAKjCvua+Zndnd3b2T3T2TzGRmN7P7N/N39/vE7O4FrORBPgUfgs/AG/BYB+Bv4M264A/wTfgE9LgBv8K34FOQ8QysgqfgPdhUByyDLyFL1wUvoCsvxxugC/oD/gXvgWxwP3wHvgAl74AroWuvQL+FP8B7cEsnwRuwC64FHy7BG7AW3oQ+hR/Ad6Gv/gLfgJfwPbi0B3yFT0JgQh+FP0D/wD34FuwG/wK34d068BV8C34d/hB8C14ET8AP4FvQ1/8W/Ab6Av4CXYb/KfxD8Fp8A709Bv4N34bVfAXmgpfgs/A27A7ffgYfgefgNfgZ7LgDfoW/wL+h9C78W/gbdPuBfI9+BJ+Gf8O/4Tcg4xewCP4L34R+B/8VfgZPwB/g50F08BfwbOht2AG/hi/Df2FP/it0pQzcg/8bngy/AP8AvwGvQDd/C9Y9k4MNo3s2Q2+NGvP2Gf1wG/gvzNnryA8gTMA+gHWAeYBRgFnAYoBZwGEAs4CTAGcBqwFnAc4CngI8B9gLWA8YDLgEcBLgAOAJwBGAWcAlgFGAQ4A/vJ/fb/7K/X/AImBOz6U4BLAdcArgGMCvwEOAjwBHAE4APgAcBDgBOADwEGAU4APAU4APgU4AHgKcBzgfGAs4BRgK8B/gI8BtgPWApYDegKWAhYDegJWAmYCNgLmAqYCdgOWAuYCdgSmApoCEwFNgeuBTcF1gCbgEkBbYBJgImAmYDLgXmA64BTgQ8AFgMMAXgK8BHgLcB7gXGC8Hyzwn4FrgKXA9uAOYDZwFWA/YBngQcCngV7Abj2uAzYDxv3d2L+bsQYwG3AasB5wCLAYsApwGbAQ8BjwUeA8yH2AGYBZgGEAs4BpN6D7S60FmATsB0wHzAZsB0wFTADsBswFTAXMBmwDTAZMBOwAzAPsBUwETAG2A2YDNwMmAjYD5gDmAOYDpgHmAqYD5gHmA6YC5gGmA9MBcwDTAGmAqYC2wHTAysAswMrAFsDKwCbAysBWwCrAZsAqwDbAVsCqwAbAVsCGwEbAVsAq9gC2ArYAtgK2AbYC/gS/AsV+P/z/A9A9fP4f+B8+AQ3/AgwA/xCMBw2/QTd+ADAA/EMwHjb9Bq34/gF+Av4BfW6C8/8QAAAAASUVORK5CYII=';
@@ -12,7 +12,6 @@ const logoUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqa
 export default function LoginPage() {
   const router = useRouter();
   const { user, signInWithGoogle, loading } = useAuth();
-  const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
     if (!loading && user) {
@@ -22,14 +21,12 @@ export default function LoginPage() {
 
 
   const handleSignIn = async () => {
-    setIsSigningIn(true);
+    // No need to set loading state here, useAuth handles it.
     await signInWithGoogle();
   };
   
-  const showLoadingSpinner = loading || isSigningIn;
-
   // Show a loading indicator while the auth state is being determined or after clicking sign-in
-  if (showLoadingSpinner) {
+  if (loading) {
      return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -74,7 +71,7 @@ export default function LoginPage() {
                 <p className="text-white/90 mb-10 text-lg">Sign in to continue using hire varahe</p>
                 <Button 
                   onClick={handleSignIn}
-                  disabled={isSigningIn}
+                  disabled={loading}
                   className="w-full bg-white hover:bg-gray-50 text-gray-800 border-0 flex items-center justify-center gap-3 py-6 rounded-full shadow-lg transition-all duration-200 hover:scale-105"
                   size="lg"
                 >
