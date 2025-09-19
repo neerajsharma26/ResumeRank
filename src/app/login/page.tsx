@@ -7,8 +7,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { useEffect } from 'react';
 import Image from 'next/image';
 
-const logoUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAyVJREFUeF7tmu1tFEEQhD2sEgFQgVABUAFQgVABUAFQAVABUAFQAVABUAFQAVRAKjCvua+Zndnd3b2T3T2TzGRmN7P7N/N39/vE7O4FrORBPgUfgs/AG/BYB+Bv4M264A/wTfgE9LgBv8K34FOQ8QysgqfgPdhUByyDLyFL1wUvoCsvxxugC/oD/gXvgWxwP3wHvgAl74AroWuvQL+FP8B7cEsnwRuwC64FHy7BG7AW3oQ+hR/Ad6Gv/gLfgJfwPbi0B3yFT0JgQh+FP0D/wD34FuwG/wK34d068BV8C34d/hB8C14ET8AP4FvQ1/8W/Ab6Av4CXYb/KfxD8Fp8A709Bv4N34bVfAXmgpfgs/A27A7ffgYfgefgNfgZ7LgDfoW/wL+h9C78W/gbdPuBfI9+BJ+Gf8O/4Tcg4xewCP4L34R+B/8VfgZPwB/g50F08BfwbOht2AG/hi/Df2FP/it0pQzcg/8bngy/AP8AvwGvQDd/C9Y9k4MNo3s2Q2+NGvP2Gf1wG/gvzNnryA8gTMA+gHWAeYBRgFnAYoBZwGEAs4CTAGcBqwFnAc4CngI8B9gLWA8YDLgEcBLgAOAJwBGAWcAlgFGAQ4A/vJ/fb/7K/X/AImBOz6U4BLAdcArgGMCvwEOAjwBHAE4APgAcBDgBOADwEGAU4APAU4APgU4AHgKcBzgfGAs4BRgK8B/gI8BtgPWApYDegKWAhYDegJWAmYCNgLmAqYCdgOWAuYCdgSmApoCEwFNgeuBTcF1gCbgEkBbYBJgImAmYDLgXmA64BTgQ8AFgMMAXgK8BHgLcB7gXGC8Hyzwn4FrgKXA9uAOYDZwFWA/YBngQcCngV7Abj2uAzYDxv3d2L+bsQYwG3AasB5wCLAYsApwGbAQ8BjwUeA8yH2AGYBZgGEAs4BpN6D7S60FmATsB0wHzAZsB0wFTADsBswFTAXMBmwDTAZMBOwAzAPsBUwETAG2A2YDNwMmAjYD5gDmAOYDpgHmAqYD5gHmA6YC5gGmA9MBcwDTAGmAqYC2wHTAysAswMrAFsDKwCbAysBWwCrAZsAqwDbAVsCqwAbAVsCGwEbAVsAq9gC2ArYAtgK2AbYC/gS/AsV+P/z/A9A9fP4f+B8+AQ3/AgwA/xCMBw2/QTd+ADAA/EMwHjb9Bq34/gF+Av4BfW6C8/8QAAAAASUVORK5CYII=';
-
 export default function LoginPage() {
   const router = useRouter();
   const { user, signInWithGoogle, loading } = useAuth();
@@ -21,11 +19,9 @@ export default function LoginPage() {
 
 
   const handleSignIn = async () => {
-    // No need to set loading state here, useAuth handles it.
     await signInWithGoogle();
   };
   
-  // Show a loading indicator while the auth state is being determined or after clicking sign-in
   if (loading) {
      return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
@@ -35,31 +31,25 @@ export default function LoginPage() {
     );
   }
   
-  // If not loading and not signed in, show the login card.
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col relative">
-      {/* Light Background Gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-50/40 via-transparent to-slate-100/30 pointer-events-none"></div>
       
-      {/* Header */}
       <header className="flex items-center justify-between bg-[rgba(239,239,239,1)] shadow-sm border-b relative z-10 px-[32px] py-[0px]">
         <div className="flex items-center gap-4">
           <div className="bg-[rgba(242,242,242,1)] rounded-xl p-2">
             <div className="w-14 h-14 bg-[rgba(206,206,205,1)] rounded-lg flex items-center justify-center shadow-sm">
-                <Image src={logoUrl} alt="Hire Varahe Logo" width={40} height={40} />
+                <Image src="/images/logo.png" alt="Hire Varahe Logo" width={40} height={40} />
             </div>
           </div>
           <h1 className="text-3xl font-semibold text-black font-['Bitter']">Hire Varahe</h1>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 flex items-center justify-center px-8 py-16 relative z-10">
         <div className="w-full max-w-6xl flex flex-col items-center space-y-20">
-          {/* Sign In Card */}
           <div className="w-full max-w-md relative">
             <div className="bg-gradient-to-br from-teal-400 via-cyan-500 to-purple-600 rounded-3xl p-12 shadow-2xl relative overflow-hidden">
-              {/* Background Effects */}
               <div className="absolute inset-0">
                 <div className="absolute -top-10 -left-10 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
                 <div className="absolute top-1/2 -right-16 w-48 h-48 bg-white/5 rounded-full blur-2xl"></div>
@@ -87,7 +77,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Process Steps */}
           <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-4xl">
             <h3 className="text-xl font-semibold text-center mb-8 text-gray-800">How it works</h3>
             <div className="flex items-center justify-center space-x-12">
