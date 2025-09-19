@@ -4,12 +4,13 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { BarChart3, LayoutDashboard, Loader2, Upload, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 
 export default function LoginPage() {
   const router = useRouter();
   const { user, signInWithGoogle, loading } = useAuth();
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
     if (!loading && user) {
@@ -19,10 +20,17 @@ export default function LoginPage() {
 
 
   const handleSignIn = async () => {
-    await signInWithGoogle();
+    setIsSigningIn(true);
+    try {
+      await signInWithGoogle();
+      // The redirect will happen, so we might not even hit the end of this.
+    } catch (error) {
+      console.error("Sign-in failed", error);
+      setIsSigningIn(false); // In case of redirect failure
+    }
   };
   
-  if (loading) {
+  if (loading || isSigningIn) {
      return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -39,7 +47,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-4">
           <div className="bg-[rgba(242,242,242,1)] rounded-xl p-2">
             <div className="w-14 h-14 bg-[rgba(206,206,205,1)] rounded-lg flex items-center justify-center shadow-sm">
-                <Image src="/images/logo.png" alt="Hire Varahe Logo" width={40} height={40} />
+                <Image src="/images/varahe logo.png" alt="Hire Varahe Logo" width={40} height={40} />
             </div>
           </div>
           <h1 className="text-3xl font-semibold text-black font-['Bitter']">Hire Varahe</h1>
@@ -61,7 +69,7 @@ export default function LoginPage() {
                 <p className="text-white/90 mb-10 text-lg">Sign in to continue using hire varahe</p>
                 <Button 
                   onClick={handleSignIn}
-                  disabled={loading}
+                  disabled={isSigningIn}
                   className="w-full bg-white hover:bg-gray-50 text-gray-800 border-0 flex items-center justify-center gap-3 py-6 rounded-full shadow-lg transition-all duration-200 hover:scale-105"
                   size="lg"
                 >
