@@ -2,11 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Chrome, Loader2 } from 'lucide-react';
+import { BarChart3, LayoutDashboard, Loader2, Upload, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useEffect, useState } from 'react';
-import { Logo } from '@/components/logo';
+import Image from 'next/image';
+
+const logoUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAyVJREFUeF7tmu1tFEEQhD2sEgFQgVABUAFQgVABUAFQAVABUAFQAVABUAFQAVRAKjCvua+Zndnd3b2T3T2TzGRmN7P7N/N39/vE7O4FrORBPgUfgs/AG/BYB+Bv4M264A/wTfgE9LgBv8K34FOQ8QysgqfgPdhUByyDLyFL1wUvoCsvxxugC/oD/gXvgWxwP3wHvgAl74AroWuvQL+FP8B7cEsnwRuwC64FHy7BG7AW3oQ+hR/Ad6Gv/gLfgJfwPbi0B3yFT0JgQh+FP0D/wD34FuwG/wK34d068BV8C34d/hB8C14ET8AP4FvQ1/8W/Ab6Av4CXYb/KfxD8Fp8A709Bv4N34bVfAXmgpfgs/A27A7ffgYfgefgNfgZ7LgDfoW/wL+h9C78W/gbdPuBfI9+BJ+Gf8O/4Tcg4xewCP4L34R+B/8VfgZPwB/g50F08BfwbOht2AG/hi/Df2FP/it0pQzcg/8bngy/AP8AvwGvQDd/C9Y9k4MNo3s2Q2+NGvP2Gf1wG/gvzNnryA8gTMA+gHWAeYBRgFnAYoBZwGEAs4CTAGcBqwFnAc4CngI8B9gLWA8YDLgEcBLgAOAJwBGAWcAlgFGAQ4A/vJ/fb/7K/X/AImBOz6U4BLAdcArgGMCvwEOAjwBHAE4APgAcBDgBOADwEGAU4APAU4APgU4AHgKcBzgfGAs4BRgK8B/gI8BtgPWApYDegKWAhYDegJWAmYCNgLmAqYCdgOWAuYCdgSmApoCEwFNgeuBTcF1gCbgEkBbYBJgImAmYDLgXmA64BTgQ8AFgMMAXgK8BHgLcB7gXGC8Hyzwn4FrgKXA9uAOYDZwFWA/YBngQcCngV7Abj2uAzYDxv3d2L+bsQYwG3AasB5wCLAYsApwGbAQ8BjwUeA8yH2AGYBZgGEAs4BpN6D7S60FmATsB0wHzAZsB0wFTADsBswFTAXMBmwDTAZMBOwAzAPsBUwETAG2A2YDNwMmAjYD5gDmAOYDpgHmAqYD5gHmA6YC5gGmA9MBcwDTAGmAqYC2wHTAysAswMrAFsDKwCbAysBWwCrAZsAqwDbAVsCqwAbAVsCGwEbAVsAq9gC2ArYAtgK2AbYC/gS/AsV+P/z/A9A9fP4f+B8+AQ3/AgwA/xCMBw2/QTd+ADAA/EMwHjb9Bq34/gF+Av4BfW6C8/8QAAAAASUVORK5CYII=';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,7 +31,7 @@ export default function LoginPage() {
   // Show a loading indicator while the auth state is being determined or after clicking sign-in
   if (showLoadingSpinner) {
      return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="mt-4 text-muted-foreground">Authenticating...</p>
       </div>
@@ -39,28 +40,91 @@ export default function LoginPage() {
   
   // If not loading and not signed in, show the login card.
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background">
-      <Card className="mx-auto w-full max-w-md shadow-lg">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
-            <Logo />
+    <div className="min-h-screen bg-gray-50 flex flex-col relative">
+      {/* Light Background Gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/40 via-transparent to-slate-100/30 pointer-events-none"></div>
+      
+      {/* Header */}
+      <header className="flex items-center justify-between bg-[rgba(239,239,239,1)] shadow-sm border-b relative z-10 px-[32px] py-[0px]">
+        <div className="flex items-center gap-4">
+          <div className="bg-[rgba(242,242,242,1)] rounded-xl p-2">
+            <div className="w-14 h-14 bg-[rgba(206,206,205,1)] rounded-lg flex items-center justify-center shadow-sm">
+                <Image src={logoUrl} alt="Hire Varahe Logo" width={40} height={40} />
+            </div>
           </div>
-          <CardTitle className="text-3xl font-bold">Hire Varahe</CardTitle>
-          <CardDescription>
-            Sign in to access your AI-powered resume analysis dashboard.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col space-y-4">
-            <Button onClick={handleSignIn} className="w-full" size="lg" disabled={isSigningIn}>
-               <>
-                <Chrome className="mr-2 h-5 w-5" />
-                Sign In with Google
-              </>
-            </Button>
+          <h1 className="text-3xl font-semibold text-black font-['Bitter']">Hire Varahe</h1>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 flex items-center justify-center px-8 py-16 relative z-10">
+        <div className="w-full max-w-6xl flex flex-col items-center space-y-20">
+          {/* Sign In Card */}
+          <div className="w-full max-w-md relative">
+            <div className="bg-gradient-to-br from-teal-400 via-cyan-500 to-purple-600 rounded-3xl p-12 shadow-2xl relative overflow-hidden">
+              {/* Background Effects */}
+              <div className="absolute inset-0">
+                <div className="absolute -top-10 -left-10 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
+                <div className="absolute top-1/2 -right-16 w-48 h-48 bg-white/5 rounded-full blur-2xl"></div>
+                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 w-64 h-32 bg-white/10 rounded-full blur-xl"></div>
+              </div>
+              
+              <div className="relative z-10 text-center">
+                <h2 className="text-4xl font-bold mb-6 text-white">Welcome</h2>
+                <p className="text-white/90 mb-10 text-lg">Sign in to continue using hire varahe</p>
+                <Button 
+                  onClick={handleSignIn}
+                  disabled={isSigningIn}
+                  className="w-full bg-white hover:bg-gray-50 text-gray-800 border-0 flex items-center justify-center gap-3 py-6 rounded-full shadow-lg transition-all duration-200 hover:scale-105"
+                  size="lg"
+                >
+                  <svg className="w-6 h-6" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  Sign in with Google
+                </Button>
+              </div>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Process Steps */}
+          <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-4xl">
+            <h3 className="text-xl font-semibold text-center mb-8 text-gray-800">How it works</h3>
+            <div className="flex items-center justify-center space-x-12">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="w-20 h-20 bg-blue-100 rounded-xl flex items-center justify-center border-2 border-blue-200">
+                  <Upload className="w-10 h-10 text-blue-600" />
+                </div>
+                <p className="font-medium text-gray-700">Upload Files</p>
+                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">1</div>
+              </div>
+              
+              <ArrowRight className="w-8 h-8 text-gray-400" />
+              
+              <div className="flex flex-col items-center space-y-4">
+                <div className="w-20 h-20 bg-green-100 rounded-xl flex items-center justify-center border-2 border-green-200">
+                  <BarChart3 className="w-10 h-10 text-green-600" />
+                </div>
+                <p className="font-medium text-gray-700">Analyze</p>
+                <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white font-semibold">2</div>
+              </div>
+              
+              <ArrowRight className="w-8 h-8 text-gray-400" />
+              
+              <div className="flex flex-col items-center space-y-4">
+                <div className="w-20 h-20 bg-purple-100 rounded-xl flex items-center justify-center border-2 border-purple-200">
+                  <LayoutDashboard className="w-10 h-10 text-purple-600" />
+                </div>
+                <p className="font-medium text-gray-700">View Dashboard</p>
+                <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white font-semibold">3</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
