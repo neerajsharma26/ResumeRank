@@ -97,16 +97,18 @@ export async function analyzeResumesAction(
         return acc;
     }, {} as AnalysisDetails);
 
-    // Create a simple, unranked list of resumes for the initial report.
-    // The ranking can be done later as a separate, more robust action.
+    // Step 2: Rank the resumes based on the collected details
+    // Note: We are now performing a simple sort based on the keyword score.
+    // The more complex `rankResumesFlow` is removed to prevent timeouts.
     const unrankedResumes = resumes.map(resume => ({
       filename: resume.filename,
-      score: allDetails[resume.filename].keywords.score || 0, // Use keyword score as a placeholder
+      score: allDetails[resume.filename].keywords.score || 0, // Use keyword score for initial ranking
       highlights: allDetails[resume.filename].keywords.summary || 'Awaiting full ranking analysis.',
     }));
 
     // Sort by placeholder score
     const sortedRankedResumes = [...unrankedResumes].sort((a, b) => b.score - a.score);
+
 
     // Prepare initial report data for Firestore
     const statuses = sortedRankedResumes.reduce((acc, r) => {
