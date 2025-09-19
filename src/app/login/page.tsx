@@ -86,7 +86,7 @@ export default function LoginPage() {
             <h3 className="text-xl font-semibold text-center mb-8 text-gray-800">How it works</h3>
             <div className="flex items-center justify-center space-x-12">
               <div className="flex flex-col items-center space-y-4">
-                <div className="w-20 h-20 bg-blue-100 rounded-xl flex items-center justify-center border-2 border-blue-200">
+                <div className="w-20 h-20 bg-blue-100 rounded-xl flex items-center justify-center border-2 border-blue-200 transition-colors hover:bg-blue-200">
                   <Upload className="w-10 h-10 text-blue-600" />
                 </div>
                 <p className="font-medium text-gray-700">Upload Files</p>
@@ -96,7 +96,7 @@ export default function LoginPage() {
               <ArrowRight className="w-8 h-8 text-gray-400" />
               
               <div className="flex flex-col items-center space-y-4">
-                <div className="w-20 h-20 bg-green-100 rounded-xl flex items-center justify-center border-2 border-green-200">
+                <div className="w-20 h-20 bg-green-100 rounded-xl flex items-center justify-center border-2 border-green-200 transition-colors hover:bg-green-200">
                   <BarChart3 className="w-10 h-10 text-green-600" />
                 </div>
                 <p className="font-medium text-gray-700">Analyze</p>
@@ -106,7 +106,7 @@ export default function LoginPage() {
               <ArrowRight className="w-8 h-8 text-gray-400" />
               
               <div className="flex flex-col items-center space-y-4">
-                <div className="w-20 h-20 bg-purple-100 rounded-xl flex items-center justify-center border-2 border-purple-200">
+                <div className="w-20 h-20 bg-purple-100 rounded-xl flex items-center justify-center border-2 border-purple-200 transition-colors hover:bg-purple-200">
                   <LayoutDashboard className="w-10 h-10 text-purple-600" />
                 </div>
                 <p className="font-medium text-gray-700">View Dashboard</p>
