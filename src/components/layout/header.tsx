@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Logo } from '@/components/logo';
+import Image from 'next/image';
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -20,7 +21,7 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-3">
             <div className="h-8 w-8">
-              <Logo />
+              <Image src="/images/varahe-logo.png" alt="Hire Varahe Logo" width={32} height={32} />
             </div>
             <h1 className="text-2xl font-bold text-foreground">Hire Varahe</h1>
           </div>
