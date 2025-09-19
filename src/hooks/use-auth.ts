@@ -26,36 +26,36 @@ export function useAuth(): AuthContextType {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setUser(user);
-        setLoading(false);
-      } else {
-         // Check for redirect result when the app initializes
-        getRedirectResult(auth)
-          .then((result) => {
-            if (result?.user) {
-              setUser(result.user);
-            }
-          })
-          .catch((error) => {
-            console.error('Error getting redirect result:', error);
-          })
-          .finally(() => {
-            setLoading(false);
-          });
-      }
-    });
-    return () => unsubscribe();
+    // First, check for the redirect result when the component mounts
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          // User is signed in via redirect.
+          setUser(result.user);
+        }
+      })
+      .catch((error) => {
+        console.error('Error getting redirect result:', error);
+      })
+      .finally(() => {
+         // After checking redirect, set up the state change listener.
+         // This will also handle the case where the user is already signed in.
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+          setUser(user);
+          setLoading(false);
+        });
+        
+        // Return the unsubscribe function to be called on cleanup.
+        return () => unsubscribe();
+      });
   }, []);
 
   const signInWithGoogle = async () => {
     setLoading(true);
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithRedirect(auth, provider);
-      // The user will be redirected, so the rest of the code in this block may not execute
-      // until they return to the app. The onAuthStateChanged listener will handle the result.
+      // We don't need to await this. It will navigate the page away.
+      signInWithRedirect(auth, provider);
     } catch (error) {
       console.error('Error initiating sign in with redirect:', error);
       setLoading(false);
@@ -63,14 +63,11 @@ export function useAuth(): AuthContextType {
   };
 
   const logout = async () => {
-    setLoading(true);
     try {
       await signOut(auth);
-      setUser(null); // Explicitly set user to null on logout
+      setUser(null);
     } catch (error) {
       console.error('Error signing out:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
