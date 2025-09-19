@@ -314,20 +314,6 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
               <h2 className="text-2xl font-semibold text-black mb-2 font-['Bitter']">
                 {analysisResult.jobDescription.split('\n')[0] || "Analysis Report"}
               </h2>
-              <div className="flex items-center justify-center gap-4 text-sm text-gray-500 mt-4">
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-4 h-4" />
-                  Created {formatDistanceToNow(new Date(analysisResult.createdAt), { addSuffix: true })}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-4 h-4" />
-                  Last updated {formatDistanceToNow(new Date(analysisResult.createdAt), { addSuffix: true })}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Users className="w-4 h-4" />
-                  {analysisResult.resumes.length} candidates
-                </span>
-              </div>
             </div>
 
             <Card className="bg-white shadow-sm">
