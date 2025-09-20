@@ -15,13 +15,11 @@ export default function Header() {
   const { user, logout } = useAuth();
 
   return (
-    <header className="bg-white shadow-sm border-b sticky top-0 z-10 px-8 py-4">
+    <header className="bg-card shadow-sm border-b sticky top-0 z-10 px-8 py-4">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 flex items-center justify-center">
-              <Logo />
-            </div>
+            <Logo />
             <h1 className="text-3xl font-semibold text-black font-['Bitter']">Hire Varahe</h1>
           </div>
           <div className="flex items-center space-x-4">

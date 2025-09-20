@@ -300,19 +300,15 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
     <div className="min-h-screen bg-gray-50 flex flex-col relative">
       <div className="absolute inset-0 bg-gradient-to-br from-blue-50/40 via-transparent to-slate-100/30 pointer-events-none"></div>
       
-      <header className="flex items-center justify-between bg-[rgba(239,239,239,1)] shadow-sm border-b relative z-10 px-[32px] py-[16px]">
+      <header className="flex items-center justify-between bg-card shadow-sm border-b relative z-10 px-8 py-4">
         <div className="flex items-center gap-4">
-          <div className="bg-[rgba(242,242,242,1)] rounded-xl p-2">
-            <div className="w-14 h-14 bg-[rgba(206,206,205,1)] rounded-lg flex items-center justify-center shadow-sm">
-                <Logo />
-            </div>
-          </div>
+          <Logo />
           <h1 className="text-3xl font-semibold text-black font-['Bitter']">Hire Varahe</h1>
         </div>
 
         {user && <DropdownMenu>
           <DropdownMenuTrigger asChild>
-             <Button variant="ghost" className="relative h-12 w-12 rounded-full bg-[rgba(232,227,227,0.68)]">
+             <Button variant="ghost" className="relative h-12 w-12 rounded-full bg-slate-100">
               <Avatar className="h-10 w-10">
                 <AvatarImage src={user.photoURL ?? ''} alt={user.displayName ?? 'User'} />
                 <AvatarFallback className="bg-teal-100 text-teal-600">{user.displayName?.charAt(0)}</AvatarFallback>
