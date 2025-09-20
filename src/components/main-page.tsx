@@ -310,53 +310,6 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to Dashboard
             </Button>
-             <div className="text-center mb-6">
-              <h2 className="text-2xl font-semibold text-black mb-2 font-['Bitter']">
-                {analysisResult.jobDescription.split('\n')[0] || "Analysis Report"}
-              </h2>
-            </div>
-
-            <Card className="bg-white shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Briefcase className="w-5 h-5" />
-                    Job Description
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {jdFile ? (
-                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <FileText className="w-6 h-6 text-blue-600" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-gray-800">
-                              {jdFile.filename}
-                            </h4>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                           <a href={jdFile.url} target="_blank" rel="noopener noreferrer">
-                              <Button variant="outline" size="sm">
-                                <Eye className="w-4 h-4 mr-2" />
-                                View
-                              </Button>
-                           </a>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans max-h-48 overflow-y-auto">
-                        {analysisResult.jobDescription}
-                      </pre>
-                    </div>
-                  )}
-                </CardContent>
-            </Card>
             
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "all" | "shortlisted" | "rejected")}>
               <div className="flex justify-between items-center mb-4">
