@@ -30,6 +30,7 @@ import {
   getDoc,
   deleteDoc,
   arrayUnion,
+  setDoc,
 } from 'firebase/firestore';
 import {ref, uploadBytes, getDownloadURL, deleteObject, listAll} from 'firebase/storage';
 
@@ -280,10 +281,11 @@ export async function updateAndReanalyzeReport(
             const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
             const [skills, keywords] = await Promise.all([skillsPromise, keywordsPromise]);
             
-            allDetails[resume.filename] = { skills, keywords };
+            const detailData = { skills, keywords };
+            allDetails[resume.filename] = detailData;
 
             const detailRef = doc(db, 'users', userId, 'analysisReports', reportId, 'details', resume.filename);
-            await updateDoc(detailRef, { skills, keywords });
+            await setDoc(detailRef, detailData);
         }
 
 
