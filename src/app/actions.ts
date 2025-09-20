@@ -1,3 +1,4 @@
+
 'use server';
 
 import {
@@ -239,10 +240,9 @@ export async function updateAndReanalyzeReport(
         }
         const reportData = reportSnapshot.data();
         const jobDescription = reportData.jobDescription;
-        const existingResumes = reportData.resumes || [];
+        const existingResumesWithUrls = reportData.resumes || [];
         const existingStatuses = reportData.statuses || {};
 
-        // 1. Fetch all existing analysis details.
         const detailsCollectionRef = collection(db, 'users', userId, 'analysisReports', reportId, 'details');
         const detailsSnapshot = await getDocs(detailsCollectionRef);
         const allDetails = detailsSnapshot.docs.reduce((acc, detailDoc) => {
@@ -250,7 +250,6 @@ export async function updateAndReanalyzeReport(
           return acc;
         }, {} as AnalysisDetails);
 
-        // 2. Upload new resume files
         enqueue({ type: 'status', message: 'Uploading new resume files...' });
         const uploadPromises = newFiles.map(async (file) => {
           const storageRef = ref(storage, `resumehire/${userId}/${reportId}/${file.filename}`);
@@ -260,7 +259,6 @@ export async function updateAndReanalyzeReport(
         });
         const uploadedFiles = await Promise.all(uploadPromises);
 
-        // 3. Analyze *only* the new resumes.
         for (const resume of newResumes) {
             enqueue({ type: 'status', message: `Analyzing new resume: ${resume.filename}...` });
             const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content! }));
@@ -274,13 +272,12 @@ export async function updateAndReanalyzeReport(
             await setDoc(detailRef, detailData);
         }
 
-        // 4. Create a single, deduplicated source of truth for all resumes (old and new)
+        // Create a single, deduplicated source of truth for all resumes (old and new)
         const allResumesMap = new Map<string, { filename: string; url: string }>();
-        existingResumes.forEach((r: any) => allResumesMap.set(r.filename, r));
+        existingResumesWithUrls.forEach((r: any) => allResumesMap.set(r.filename, r));
         uploadedFiles.forEach(f => allResumesMap.set(f.filename, f));
         const allResumesForDb = Array.from(allResumesMap.values());
 
-        // 5. Build the final, deduplicated ranking list from the single source of truth.
         const allRankedResumes = allResumesForDb.map(r => ({
             filename: r.filename,
             score: allDetails[r.filename]?.keywords?.score || 0,
@@ -289,18 +286,17 @@ export async function updateAndReanalyzeReport(
 
         const sortedRankedResumes = [...allRankedResumes].sort((a, b) => b.score - a.score);
 
-        // 6. Update statuses, preserving existing ones and adding new ones.
+        const finalStatuses = { ...existingStatuses };
         for (const resume of allResumesForDb) {
-            if (!existingStatuses[resume.filename]) {
-                existingStatuses[resume.filename] = 'none';
+            if (!finalStatuses[resume.filename]) {
+                finalStatuses[resume.filename] = 'none';
             }
         }
         
-        // 7. Update the main report document with the clean, combined data.
         await updateDoc(reportRef, { 
           resumes: allResumesForDb,
           rankedResumes: sortedRankedResumes, 
-          statuses: existingStatuses
+          statuses: finalStatuses
         });
 
         enqueue({ type: 'status', message: 'Finalizing updated report...' });
