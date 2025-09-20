@@ -72,7 +72,7 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
     try {
       await deleteAnalysisReport(user.uid, reportToDelete.id);
       setReports(reports.filter(r => r.id !== reportToDelete.id));
-      toast({ title: "Report Deleted", description: `"${reportToDelete.jobDescription}" has been permanently removed.` });
+      toast({ title: "Report Deleted", description: `"${reportToDelete.jobDescription.substring(0, 50)}..." has been permanently removed.` });
     } catch (e: any) {
       toast({ title: "Delete Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -460,7 +460,7 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the report for "{reportToDelete?.jobDescription}" and all associated resume files. This action cannot be undone.
+              This will permanently delete the report for "{reportToDelete?.jobDescription ? `${reportToDelete.jobDescription.substring(0, 100)}...` : 'this report'}" and all associated resume files. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
