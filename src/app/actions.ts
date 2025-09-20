@@ -249,27 +249,30 @@ export async function updateAndReanalyzeReport(
         });
         const uploadedFiles = await Promise.all(uploadPromises);
 
-        // Create one source of truth for all resumes (old and new), ensuring no duplicates.
+        // Create a single source of truth for all resumes (old and new) using a Map to prevent duplicates.
         const allResumesMap = new Map<string, { filename: string; url: string; content?: string }>();
-        // Add existing resumes
+        
+        // 1. Add existing resumes from the report to the map.
         if(reportData.resumes) {
             reportData.resumes.forEach((r: any) => allResumesMap.set(r.filename, { ...r, content: '' }));
         }
-        // Add/overwrite with new resumes, which have content and a fresh URL
+        
+        // 2. Add/overwrite with new resumes, which have content and a fresh URL.
         newResumes.forEach((r) => {
-          const newUrl = uploadedFiles.find(f => f.filename === r.filename)?.url || '';
-          allResumesMap.set(r.filename, { ...r, url: newUrl });
+          const newUrl = uploadedFiles.find(f => f.filename === r.filename)?.url || allResumesMap.get(r.filename)?.url || '';
+          allResumesMap.set(r.filename, { filename: r.filename, url: newUrl, content: r.content });
         });
         
+        // This is now the definitive, deduplicated list of all resumes.
         const allResumesWithContent = Array.from(allResumesMap.values());
-        const allResumesWithUrls = allResumesWithContent.map(({content, ...rest}) => rest);
+        const allResumesForDb = allResumesWithContent.map(({content, ...rest}) => rest);
 
-        // Update the report with the complete, deduplicated list of resume URLs
+        // 3. Update the report's main resume list in one go.
         await updateDoc(reportRef, {
-            resumes: allResumesWithUrls
+            resumes: allResumesForDb
         });
         
-        // Fetch all existing analysis details
+        // 4. Fetch all existing analysis details.
         const detailsCollectionRef = collection(db, 'users', userId, 'analysisReports', reportId, 'details');
         const detailsSnapshot = await getDocs(detailsCollectionRef);
         const allDetails = detailsSnapshot.docs.reduce((acc, detailDoc) => {
@@ -277,7 +280,7 @@ export async function updateAndReanalyzeReport(
           return acc;
         }, {} as AnalysisDetails);
 
-        // Analyze *only* the new resumes that have content
+        // 5. Analyze *only* the new resumes that have content.
         const resumesToAnalyze = allResumesWithContent.filter(r => r.content);
         for (const resume of resumesToAnalyze) {
             enqueue({ type: 'status', message: `Analyzing new resume: ${resume.filename}...` });
@@ -288,14 +291,14 @@ export async function updateAndReanalyzeReport(
             const detailData = { skills, keywords };
             allDetails[resume.filename] = detailData;
 
-            // Use setDoc to create or overwrite the detail document
+            // Use setDoc to create or overwrite the detail document, preventing 'not found' errors.
             const detailRef = doc(db, 'users', userId, 'analysisReports', reportId, 'details', resume.filename);
             await setDoc(detailRef, detailData);
         }
 
         enqueue({ type: 'status', message: 'Re-ranking all candidates...' });
         
-        // Build the ranking list from the single, deduplicated source of truth
+        // 6. Build the final ranking list from the single, deduplicated source of truth.
         const resumesForRanking = allResumesWithContent.map(r => ({
             filename: r.filename,
             score: allDetails[r.filename]?.keywords?.score || 0,
@@ -304,8 +307,8 @@ export async function updateAndReanalyzeReport(
 
         const sortedRankedResumes = [...resumesForRanking].sort((a, b) => b.score - a.score);
 
+        // 7. Update statuses, preserving existing ones.
         const existingStatuses = reportData.statuses || {};
-        // Add status for new resumes, ensuring not to overwrite existing ones
         for (const resume of allResumesWithContent) {
             if (!existingStatuses[resume.filename]) {
                 existingStatuses[resume.filename] = 'none';
