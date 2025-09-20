@@ -57,7 +57,7 @@ const EmptyState = ({isFiltered = false}: {isFiltered?: boolean}) => (
 
 
 export default function MainPage({ onBack, existingResult, onAnalysisComplete }: MainPageProps) {
-  const [jobDescription, setJobDescription] = React.useState(existingResult?.jobDescription || 'Default Job Description');
+  const [jobDescription, setJobDescription] = React.useState(existingResult?.jobDescription || '');
   const [jobDescriptionFile, setJobDescriptionFile] = React.useState<File[]>([]);
   const [resumeFiles, setResumeFiles] = React.useState<File[]>([]);
   const [weights, setWeights] = React.useState<MetricWeights>(DEFAULT_WEIGHTS);
@@ -375,7 +375,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
               </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
                <Card className="bg-[rgba(194,194,235,0.1)] shadow-sm">
                  <CardHeader className="bg-[rgba(194,194,235,1)]">
                    <CardTitle className="flex items-center gap-2">
@@ -453,6 +453,81 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
                    )}
                  </CardContent>
                </Card>
+               <Card className="bg-[rgba(194,194,235,0.1)] shadow-sm">
+                <CardHeader className="bg-[rgba(194,194,235,1)]">
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-green-600" />
+                    Job Description
+                  </CardTitle>
+                  <CardDescription className="text-gray-700">
+                    Upload a file or enter text below
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                    <div
+                        className={`border-2 border-dashed rounded-lg p-4 text-center transition-all duration-200 cursor-pointer ${
+                        isJdDragOver 
+                            ? 'border-green-400 bg-green-50' 
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                        onDrop={(e) => { e.preventDefault(); setIsJdDragOver(false); handleJdUpload(e.dataTransfer.files); }}
+                        onDragOver={(e) => { e.preventDefault(); setIsJdDragOver(true); }}
+                        onDragLeave={() => setIsJdDragOver(false)}
+                        onClick={() => jdFileInputRef.current?.click()}
+                    >
+                        <FileText className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm font-medium text-gray-700 mb-1">
+                            Drop JD file here or click to browse
+                        </p>
+                        <p className="text-xs text-gray-500">PDF, TXT, DOC/DOCX, max 3MB</p>
+                        <input
+                        ref={jdFileInputRef}
+                        type="file"
+                        accept=".pdf,.txt,.doc,.docx"
+                        className="hidden"
+                        onChange={(e) => handleJdUpload(e.target.files)}
+                        />
+                    </div>
+                    {jobDescriptionFile.length > 0 && (
+                        <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg text-sm">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <FileText className="w-4 h-4 text-green-600 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                            <p className="font-medium text-gray-800 truncate">{jobDescriptionFile[0].name}</p>
+                            <p className="text-xs text-gray-500">{formatFileSize(jobDescriptionFile[0].size)}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-2">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            <Button variant="ghost" size="sm" onClick={removeJdFile} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500">
+                                <X className="w-3 h-3" />
+                            </Button>
+                        </div>
+                        </div>
+                    )}
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-slate-50 px-2 text-muted-foreground">Or</span>
+                        </div>
+                    </div>
+                    <div>
+                        <Label htmlFor="jd-text" className="text-sm font-medium text-gray-700 mb-2 block">
+                            Paste Job Description Text
+                        </Label>
+                        <Textarea
+                        id="jd-text"
+                        placeholder="Enter the job description, requirements, and qualifications..."
+                        value={jobDescription}
+                        onChange={(e) => setJobDescription(e.target.value)}
+                        rows={6}
+                        className="resize-none"
+                        />
+                    </div>
+                </CardContent>
+              </Card>
               <Card className="bg-[rgba(194,194,235,0.05)] shadow-sm">
                 <CardHeader className="bg-[rgba(194,194,235,0.92)]">
                   <CardTitle className="flex items-center gap-2">
