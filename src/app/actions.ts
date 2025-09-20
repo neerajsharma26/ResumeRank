@@ -245,29 +245,30 @@ export async function updateAndReanalyzeReport(
           const storageRef = ref(storage, `resumehire/${userId}/${reportId}/${file.filename}`);
           await uploadBytes(storageRef, file.data);
           const downloadURL = await getDownloadURL(storageRef);
-          return { filename: file.filename, url: downloadURL, content: '' }; // Add content property
+          return { filename: file.filename, url: downloadURL };
         });
 
-        const uploadedResumes = await Promise.all(uploadPromises);
+        const uploadedFiles = await Promise.all(uploadPromises);
 
-        const allResumesWithUrlsMap = new Map<string, {filename: string, url: string}>();
-        reportData.resumes.forEach((r: any) => allResumesWithUrlsMap.set(r.filename, r));
-        uploadedResumes.forEach(r => allResumesWithUrlsMap.set(r.filename, {filename: r.filename, url: r.url}));
-        const allResumesWithUrls = Array.from(allResumesWithUrlsMap.values());
+        // Create one source of truth for all resumes (old and new), ensuring no duplicates.
+        const allResumesMap = new Map<string, { filename: string, url: string, content?: string }>();
+        // Add existing resumes
+        reportData.resumes.forEach((r: any) => allResumesMap.set(r.filename, { ...r, content: '' }));
+        // Add/overwrite with new resumes, which have content and a fresh URL
+        newResumes.forEach((r, index) => {
+          const newUrl = uploadedFiles.find(f => f.filename === r.filename)?.url || '';
+          allResumesMap.set(r.filename, { ...r, url: newUrl });
+        });
         
+        const allResumes = Array.from(allResumesMap.values());
+        const allResumesWithUrls = allResumes.map(({content, ...rest}) => rest);
+
+        // Update the report with the complete, deduplicated list of resume URLs
         await updateDoc(reportRef, {
             resumes: allResumesWithUrls
         });
         
-        const allResumesMap = new Map<string, Resume>();
-        // Add existing resumes (we'll need their content if we want to re-rank fully)
-        // For this implementation, we assume we fetch or have content for old resumes.
-        // Let's create a placeholder for old resumes.
-        reportData.resumes.forEach((r: any) => allResumesMap.set(r.filename, { filename: r.filename, content: '', url: r.url }));
-        newResumes.forEach(r => allResumesMap.set(r.filename, r)); // new resumes have content
-        const allResumes = Array.from(allResumesMap.values());
-
-        // Step 1: get all existing details
+        // Fetch all existing analysis details
         const detailsCollectionRef = collection(db, 'users', userId, 'analysisReports', reportId, 'details');
         const detailsSnapshot = await getDocs(detailsCollectionRef);
         const allDetails = detailsSnapshot.docs.reduce((acc, detailDoc) => {
@@ -275,25 +276,24 @@ export async function updateAndReanalyzeReport(
           return acc;
         }, {} as AnalysisDetails);
 
-        // Step 2: Analyze new resumes
-        for (const resume of newResumes) {
+        // Analyze *only* the new resumes that have content
+        for (const resume of allResumes.filter(r => r.content)) {
             enqueue({ type: 'status', message: `Analyzing new resume: ${resume.filename}...` });
-            const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content }));
-            const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
+            const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content! }));
+            const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content!, jobDescription }));
             const [skills, keywords] = await Promise.all([skillsPromise, keywordsPromise]);
             
             const detailData = { skills, keywords };
             allDetails[resume.filename] = detailData;
 
+            // Use setDoc to create or overwrite the detail document
             const detailRef = doc(db, 'users', userId, 'analysisReports', reportId, 'details', resume.filename);
             await setDoc(detailRef, detailData);
         }
 
-
         enqueue({ type: 'status', message: 'Re-ranking all candidates...' });
         
-        // This is the part that was causing the duplicate key error.
-        // Ensure resumesForRanking is built from a deduplicated source.
+        // Build the ranking list from the single, deduplicated source of truth
         const resumesForRanking = allResumes.map(r => ({
             filename: r.filename,
             score: allDetails[r.filename]?.keywords?.score || 0,
@@ -303,16 +303,17 @@ export async function updateAndReanalyzeReport(
         const sortedRankedResumes = [...resumesForRanking].sort((a, b) => b.score - a.score);
 
         const existingStatuses = reportData.statuses || {};
-        const newStatuses = newResumes.reduce((acc, r) => {
-          acc[r.filename] = 'none';
-          return acc;
-        }, {} as Record<string, CandidateStatus>);
+        // Add status for new resumes, ensuring not to overwrite existing ones
+        for (const resume of allResumes) {
+            if (!existingStatuses[resume.filename]) {
+                existingStatuses[resume.filename] = 'none';
+            }
+        }
         
         await updateDoc(reportRef, { 
           rankedResumes: sortedRankedResumes, 
-          statuses: { ...existingStatuses, ...newStatuses }
+          statuses: existingStatuses
         });
-        
 
         enqueue({ type: 'status', message: 'Finalizing updated report...' });
         const finalDocSnapshot = await getDoc(reportRef);
