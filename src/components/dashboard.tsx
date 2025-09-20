@@ -363,10 +363,6 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
                     className="pl-10 h-12 text-base"
                   />
                 </div>
-                <Button className="h-12 px-6 bg-teal-600 hover:bg-teal-700 text-white">
-                  <Search className="w-4 h-4 mr-2" />
-                  Search
-                </Button>
                 <Button 
                   onClick={onNewAnalysis}
                   className="h-12 px-6 bg-gradient-to-r from-teal-400 via-cyan-500 to-purple-600 hover:opacity-90 text-white"
