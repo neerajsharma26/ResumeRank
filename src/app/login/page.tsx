@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { BarChart3, LayoutDashboard, Loader2, Upload, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import { Logo } from '@/components/logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,7 +44,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-4">
           <div className="bg-[rgba(242,242,242,1)] rounded-xl p-2">
             <div className="w-14 h-14 bg-[rgba(206,206,205,1)] rounded-lg flex items-center justify-center shadow-sm">
-                <Image src="/images/varahe-logo.png" alt="Hire Varahe Logo" width={40} height={40} />
+                <Logo />
             </div>
           </div>
           <h1 className="text-3xl font-semibold text-black font-['Bitter']">Hire Varahe</h1>

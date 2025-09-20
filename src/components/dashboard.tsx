@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import Image from 'next/image';
+import { Logo } from './logo';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import {
   AlertDialog,
@@ -304,7 +304,7 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
         <div className="flex items-center gap-4">
           <div className="bg-[rgba(242,242,242,1)] rounded-xl p-2">
             <div className="w-14 h-14 bg-[rgba(206,206,205,1)] rounded-lg flex items-center justify-center shadow-sm">
-                <Image src="/images/varahe-logo.png" alt="Hire Varahe Logo" width={40} height={40} />
+                <Logo />
             </div>
           </div>
           <h1 className="text-3xl font-semibold text-black font-['Bitter']">Hire Varahe</h1>
