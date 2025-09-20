@@ -245,27 +245,28 @@ export async function updateAndReanalyzeReport(
           const storageRef = ref(storage, `resumehire/${userId}/${reportId}/${file.filename}`);
           await uploadBytes(storageRef, file.data);
           const downloadURL = await getDownloadURL(storageRef);
-          return { filename: file.filename, url: downloadURL, content: '' };
+          return { filename: file.filename, url: downloadURL, content: '' }; // Add content property
         });
 
         const uploadedResumes = await Promise.all(uploadPromises);
 
+        const allResumesWithUrlsMap = new Map<string, {filename: string, url: string}>();
+        reportData.resumes.forEach((r: any) => allResumesWithUrlsMap.set(r.filename, r));
+        uploadedResumes.forEach(r => allResumesWithUrlsMap.set(r.filename, {filename: r.filename, url: r.url}));
+        const allResumesWithUrls = Array.from(allResumesWithUrlsMap.values());
+        
         await updateDoc(reportRef, {
-          resumes: arrayUnion(...uploadedResumes.map(r => ({ filename: r.filename, url: r.url })))
+            resumes: allResumesWithUrls
         });
-
+        
         const allResumesMap = new Map<string, Resume>();
-        reportData.resumes.forEach((r: any) => allResumesMap.set(r.filename, { filename: r.filename, content: ''}));
-        newResumes.forEach(r => allResumesMap.set(r.filename, r));
+        // Add existing resumes (we'll need their content if we want to re-rank fully)
+        // For this implementation, we assume we fetch or have content for old resumes.
+        // Let's create a placeholder for old resumes.
+        reportData.resumes.forEach((r: any) => allResumesMap.set(r.filename, { filename: r.filename, content: '', url: r.url }));
+        newResumes.forEach(r => allResumesMap.set(r.filename, r)); // new resumes have content
         const allResumes = Array.from(allResumesMap.values());
-        
-        // This is a simplified version. For a real app, you'd fetch content for old resumes if not available.
-        // For now, we only have content for new resumes.
-        // The AI flows will need content for all resumes to re-rank.
-        // This example assumes that for re-ranking, we only need to process the new resumes
-        // and then combine them with old rankings. A full re-rank of all is more complex.
-        // Let's perform analysis on ALL resumes for a full re-rank.
-        
+
         // Step 1: get all existing details
         const detailsCollectionRef = collection(db, 'users', userId, 'analysisReports', reportId, 'details');
         const detailsSnapshot = await getDocs(detailsCollectionRef);
@@ -291,6 +292,8 @@ export async function updateAndReanalyzeReport(
 
         enqueue({ type: 'status', message: 'Re-ranking all candidates...' });
         
+        // This is the part that was causing the duplicate key error.
+        // Ensure resumesForRanking is built from a deduplicated source.
         const resumesForRanking = allResumes.map(r => ({
             filename: r.filename,
             score: allDetails[r.filename]?.keywords?.score || 0,
@@ -435,3 +438,5 @@ export async function deleteAnalysisReport(
     throw new Error('Failed to delete the analysis report.');
   }
 }
+
+    
