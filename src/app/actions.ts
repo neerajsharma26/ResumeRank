@@ -254,10 +254,10 @@ export async function updateAndReanalyzeReport(
           resumes: arrayUnion(...uploadedResumes.map(r => ({ filename: r.filename, url: r.url })))
         });
 
-        const allResumes: Resume[] = [
-          ...reportData.resumes.map((r: any) => ({ filename: r.filename, content: '' })), // Content will be fetched or is new
-          ...newResumes,
-        ];
+        const allResumesMap = new Map<string, Resume>();
+        reportData.resumes.forEach((r: any) => allResumesMap.set(r.filename, { filename: r.filename, content: ''}));
+        newResumes.forEach(r => allResumesMap.set(r.filename, r));
+        const allResumes = Array.from(allResumesMap.values());
         
         // This is a simplified version. For a real app, you'd fetch content for old resumes if not available.
         // For now, we only have content for new resumes.
