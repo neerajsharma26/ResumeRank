@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { analyzeResumesAction, Report } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-import type { AnalysisResult, Resume, MetricWeights, CandidateStatus } from '@/lib/types';
+import type { AnalysisResult, Resume, MetricWeights, CandidateStatus, AnalysisDetails } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import type * as PdfJs from 'pdfjs-dist';
 
@@ -62,6 +62,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   const [resumeFiles, setResumeFiles] = React.useState<File[]>([]);
   const [weights, setWeights] = React.useState<MetricWeights>(DEFAULT_WEIGHTS);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [loadingStatus, setLoadingStatus] = React.useState('');
   
   const [isComparisonModalOpen, setIsComparisonModalOpen] = React.useState(false);
   const [comparisonResults, setComparisonResults] = React.useState<AnalysisResult['rankedResumes']>([]);
@@ -146,37 +147,31 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
     return { filename: file.name, content };
   };
 
-  const handleAnalyze = async () => {
+ const handleAnalyze = async () => {
     if (!user?.uid) {
-      toast({
-        title: 'Authentication Required',
-        description: 'Please sign in to analyze resumes.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Authentication Required', variant: 'destructive' });
       return;
     }
-
     if (resumeFiles.length === 0) {
       toast({ title: 'No Resumes', description: 'Please upload at least one resume.', variant: 'destructive' });
       return;
     }
-    
     let currentJobDescription = jobDescription;
     if (jobDescriptionFile.length > 0) {
       try {
         currentJobDescription = await fileToText(jobDescriptionFile[0]);
       } catch (error) {
-        toast({ title: 'Error Reading Job Description', description: 'Could not read the provided file.', variant: 'destructive' });
+        toast({ title: 'Error Reading Job Description', variant: 'destructive' });
         return;
       }
     }
-    
     if (!currentJobDescription.trim()) {
-      toast({ title: 'No Job Description', description: 'Please type or upload a job description.', variant: 'destructive' });
+      toast({ title: 'No Job Description', variant: 'destructive' });
       return;
     }
 
     setIsLoading(true);
+    setLoadingStatus('Preparing analysis...');
 
     try {
       const resumes = await Promise.all(resumeFiles.map(fileToResume));
@@ -187,8 +182,44 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
         }))
       );
 
-      const report = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload);
-      onAnalysisComplete(report);
+      const stream = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload);
+      
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const processStream = async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.trim() === '') continue;
+            try {
+              const chunk = JSON.parse(line);
+              if (chunk.type === 'status') {
+                setLoadingStatus(chunk.message);
+              } else if (chunk.type === 'done') {
+                onAnalysisComplete(chunk.report);
+                return; // Exit the loop
+              } else if (chunk.type === 'error') {
+                throw new Error(chunk.error);
+              }
+              // Other chunk types can be handled here if needed
+            } catch (e) {
+              console.error('Failed to parse stream chunk:', line, e);
+            }
+          }
+        }
+      };
+      
+      await processStream();
+
+
     } catch (e: any) {
       console.error(e);
       toast({
@@ -198,6 +229,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
       });
     } finally {
       setIsLoading(false);
+      setLoadingStatus('');
     }
   };
   
@@ -558,7 +590,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Analyzing...
+                    {loadingStatus || 'Analyzing...'}
                   </>
                 ) : (
                   <>
