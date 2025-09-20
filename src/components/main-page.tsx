@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { analyzeResumesAction, Report } from '@/app/actions';
+import { analyzeResumesAction, Report, updateAndReanalyzeReport } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { AnalysisResult, Resume, MetricWeights, CandidateStatus, AnalysisDetails } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
@@ -75,6 +75,8 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   const resumeFileInputRef = React.useRef<HTMLInputElement>(null);
   const jdFileInputRef = React.useRef<HTMLInputElement>(null);
 
+  const [showReanalyzeUI, setShowReanalyzeUI] = React.useState(false);
+
 
   const { toast } = useToast();
   const { user } = useAuth();
@@ -147,6 +149,39 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
     return { filename: file.name, content };
   };
 
+  const processStream = async (stream: ReadableStream) => {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.trim() === '') continue;
+        try {
+          const chunk = JSON.parse(line);
+          if (chunk.type === 'status') {
+            setLoadingStatus(chunk.message);
+          } else if (chunk.type === 'done') {
+            onAnalysisComplete(chunk.report);
+            setShowReanalyzeUI(false); // Hide UI after completion
+            return; // Exit the loop
+          } else if (chunk.type === 'error') {
+            throw new Error(chunk.error);
+          }
+        } catch (e) {
+          console.error('Failed to parse stream chunk:', line, e);
+        }
+      }
+    }
+  };
+
  const handleAnalyze = async () => {
     if (!user?.uid) {
       toast({ title: 'Authentication Required', variant: 'destructive' });
@@ -183,42 +218,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
       );
 
       const stream = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload);
-      
-      const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      const processStream = async () => {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.trim() === '') continue;
-            try {
-              const chunk = JSON.parse(line);
-              if (chunk.type === 'status') {
-                setLoadingStatus(chunk.message);
-              } else if (chunk.type === 'done') {
-                onAnalysisComplete(chunk.report);
-                return; // Exit the loop
-              } else if (chunk.type === 'error') {
-                throw new Error(chunk.error);
-              }
-              // Other chunk types can be handled here if needed
-            } catch (e) {
-              console.error('Failed to parse stream chunk:', line, e);
-            }
-          }
-        }
-      };
-      
-      await processStream();
-
+      await processStream(stream);
 
     } catch (e: any) {
       console.error(e);
@@ -230,6 +230,44 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
     } finally {
       setIsLoading(false);
       setLoadingStatus('');
+    }
+  };
+  
+  const handleReanalyze = async () => {
+    if (!user?.uid || !analysisResult?.id) {
+      toast({ title: 'Authentication or Report ID missing', variant: 'destructive' });
+      return;
+    }
+    if (resumeFiles.length === 0) {
+      toast({ title: 'No New Resumes', description: 'Please upload at least one new resume.', variant: 'destructive' });
+      return;
+    }
+    
+    setIsLoading(true);
+    setLoadingStatus('Preparing to re-analyze...');
+    try {
+      const newResumes = await Promise.all(resumeFiles.map(fileToResume));
+      const newFilesForUpload = await Promise.all(
+        resumeFiles.map(async (file) => ({
+          filename: file.name,
+          data: await file.arrayBuffer(),
+        }))
+      );
+
+      const stream = await updateAndReanalyzeReport(user.uid, analysisResult.id, newResumes, newFilesForUpload, weights);
+      await processStream(stream);
+
+    } catch (e: any) {
+      console.error(e);
+      toast({
+        title: 'Re-analysis Failed',
+        description: e.message || 'An unexpected error occurred.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+      setLoadingStatus('');
+      setResumeFiles([]); // Clear files after attempt
     }
   };
   
@@ -307,6 +345,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   };
 
   const canAnalyze = !isLoading && resumeFiles.length > 0 && (jobDescriptionFile.length > 0 || jobDescription.trim().length > 0);
+  const canReanalyze = !isLoading && resumeFiles.length > 0;
   
   const filteredResumes = React.useMemo(() => {
     if (!analysisResult) return [];
@@ -330,6 +369,71 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   
   const jdFile = analysisResult?.resumes.find(r => r.filename === (jobDescriptionFile[0]?.name));
 
+  const ReanalyzeSection = () => (
+    <div className="mt-8 space-y-4">
+      <Card className="bg-slate-100">
+        <CardHeader>
+          <CardTitle>Add New Resumes</CardTitle>
+          <CardDescription>Upload new resumes to add to this analysis. The original job description will be used.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 cursor-pointer ${
+              isDragOver 
+                ? 'border-blue-400 bg-blue-50' 
+                : 'border-gray-300 hover:border-gray-400'
+            }`}
+            onDrop={(e) => { e.preventDefault(); setIsDragOver(false); handleResumeUpload(e.dataTransfer.files); }}
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+            onDragLeave={() => setIsDragOver(false)}
+            onClick={() => resumeFileInputRef.current?.click()}
+          >
+            <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm font-medium text-gray-700 mb-1">
+              Drop new resumes here or click to browse
+            </p>
+             <input
+                ref={resumeFileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.txt,.doc,.docx"
+                className="hidden"
+                onChange={(e) => handleResumeUpload(e.target.files)}
+              />
+          </div>
+          {resumeFiles.length > 0 && (
+              <div className="space-y-2 max-h-48 overflow-y-auto p-1 mt-4">
+                {resumeFiles.map((file, index) => (
+                  <div key={`${file.name}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg text-sm">
+                    <p className="font-medium text-gray-800 truncate">{file.name}</p>
+                    <Button variant="ghost" size="sm" onClick={() => removeResumeFile(index)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500">
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+          )}
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => {setShowReanalyzeUI(false); setResumeFiles([]);}}>Cancel</Button>
+            <Button onClick={handleReanalyze} disabled={!canReanalyze}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    {loadingStatus || 'Analyzing...'}
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 mr-3" />
+                    Re-analyze
+                  </>
+                )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
@@ -338,10 +442,20 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
         
         {isViewingPastReport && analysisResult ? (
           <div className="space-y-8">
-            <Button variant="ghost" onClick={onBack} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Dashboard
-            </Button>
+            <div className="flex justify-between items-center">
+                <Button variant="ghost" onClick={onBack} className="mb-4">
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to Dashboard
+                </Button>
+                 {!showReanalyzeUI && (
+                    <Button onClick={() => setShowReanalyzeUI(true)} disabled={isLoading}>
+                        <Replace className="mr-2 h-4 w-4" />
+                        Add or Replace Resumes
+                    </Button>
+                )}
+            </div>
+
+            {showReanalyzeUI && <ReanalyzeSection />}
             
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "all" | "shortlisted" | "rejected")}>
               <div className="flex justify-between items-center mb-4">
@@ -355,7 +469,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
                   </TabsList>
               </div>
               <TabsContent value={activeTab}>
-                {isLoading && <p>Loading...</p>}
+                {isLoading && !loadingStatus.includes('Analyzing new resume') && <p>Loading...</p>}
                 {!isLoading && filteredResumes.length === 0 && <EmptyState isFiltered />}
                 {!isLoading && filteredResumes.length > 0 && (
                   <div className="space-y-4">
