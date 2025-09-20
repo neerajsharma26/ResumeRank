@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { getAnalysisReports } from '@/app/actions';
+import { deleteAnalysisReport, getAnalysisReports } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Loader2, PlusCircle, Inbox, AlertTriangle, FileText, CheckCircle, BarChart3, Users, Calendar, Eye, Plus, MoreVertical, Trash2, Grid3X3, List, Clock, FolderOpen, Search, LogOut, Settings, User } from 'lucide-react';
@@ -15,6 +15,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import Image from 'next/image';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
 
 
 const StatCard = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: string | number }) => (
@@ -35,6 +46,8 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [reportToDelete, setReportToDelete] = useState<Report | null>(null);
+  const { toast } = useToast();
 
 
   useEffect(() => {
@@ -52,6 +65,20 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
         .finally(() => setIsLoading(false));
     }
   }, [user]);
+
+  const handleDelete = async () => {
+    if (!reportToDelete || !user?.uid) return;
+
+    try {
+      await deleteAnalysisReport(user.uid, reportToDelete.id);
+      setReports(reports.filter(r => r.id !== reportToDelete.id));
+      toast({ title: "Report Deleted", description: `"${reportToDelete.jobDescription}" has been permanently removed.` });
+    } catch (e: any) {
+      toast({ title: "Delete Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setReportToDelete(null);
+    }
+  };
 
   const filteredProjects = reports.filter(project => {
     const matchesSearch = project.jobDescription.toLowerCase().includes(searchQuery.toLowerCase());
@@ -108,10 +135,7 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                      <DropdownMenuItem 
-                        onClick={() => {
-                            // Placeholder for delete
-                            console.log("Delete project", project.id);
-                        }}
+                        onClick={() => setReportToDelete(project)}
                         className="cursor-pointer text-red-600"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -247,10 +271,7 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                        <DropdownMenuItem 
-                          onClick={() => {
-                            // Placeholder for delete
-                            console.log("Delete project", project.id);
-                          }}
+                          onClick={() => setReportToDelete(project)}
                           className="cursor-pointer text-red-600"
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
@@ -433,6 +454,23 @@ export default function Dashboard({ onNewAnalysis, onViewReport }: { onNewAnalys
           </div>
         </div>
       </main>
+
+       <AlertDialog open={!!reportToDelete} onOpenChange={(open) => !open && setReportToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the report for "{reportToDelete?.jobDescription}" and all associated resume files. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

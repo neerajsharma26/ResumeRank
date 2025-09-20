@@ -28,8 +28,9 @@ import {
   updateDoc,
   writeBatch,
   getDoc,
+  deleteDoc,
 } from 'firebase/firestore';
-import {ref, uploadBytes, getDownloadURL} from 'firebase/storage';
+import {ref, uploadBytes, getDownloadURL, deleteObject, listAll} from 'firebase/storage';
 
 import type {
   Resume,
@@ -275,5 +276,39 @@ export async function getAnalysisReports(
   } catch (e: any) {
     console.error('Error fetching analysis reports:', e);
     throw new Error('Failed to fetch past analysis reports.');
+  }
+}
+
+export async function deleteAnalysisReport(
+  userId: string,
+  reportId: string
+): Promise<void> {
+  try {
+    if (!userId || !reportId) {
+      throw new Error('Authentication error or invalid report ID.');
+    }
+    const reportRef = doc(db, 'users', userId, 'analysisReports', reportId);
+
+    // Delete subcollection 'details'
+    const detailsCollectionRef = collection(reportRef, 'details');
+    const detailsSnapshot = await getDocs(detailsCollectionRef);
+    const deleteDetailsBatch = writeBatch(db);
+    detailsSnapshot.forEach(doc => {
+      deleteDetailsBatch.delete(doc.ref);
+    });
+    await deleteDetailsBatch.commit();
+
+    // Delete files from storage
+    const storageFolderRef = ref(storage, `resumehire/${userId}/${reportId}`);
+    const fileList = await listAll(storageFolderRef);
+    const deleteFilePromises = fileList.items.map(itemRef => deleteObject(itemRef));
+    await Promise.all(deleteFilePromises);
+
+    // Delete main report document
+    await deleteDoc(reportRef);
+
+  } catch (e: any) {
+    console.error('Error deleting report:', e);
+    throw new Error('Failed to delete the analysis report.');
   }
 }
