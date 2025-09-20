@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -27,11 +28,13 @@ import type { RankResumesOutput } from '@/app/actions';
 import { Award, Briefcase, ChevronDown, Star, Tag, MoreVertical, CheckCircle, XCircle, Undo } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
+import { Skeleton } from './ui/skeleton';
+
 
 interface CandidateCardProps {
   rank: number;
   rankedResume: RankResumesOutput[0];
-  details: AnalysisDetails[string];
+  details?: AnalysisDetails[string];
   status: CandidateStatus;
   onStatusChange: (status: CandidateStatus) => void;
 }
@@ -63,6 +66,8 @@ export default function CandidateCard({
     shortlisted: { text: 'Shortlisted', className: 'bg-green-100 text-green-800 hover:bg-green-200 border-green-200' },
     rejected: { text: 'Rejected', className: 'bg-red-100 text-red-800 hover:bg-red-200 border-red-200' },
   }
+
+  const isLoadingDetails = !details;
 
   return (
     <Card className="transition-all hover:shadow-lg">
@@ -129,41 +134,50 @@ export default function CandidateCard({
           <AccordionContent>
             <div className="px-6 pt-2 pb-6 space-y-4">
               <Separator />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-                <div className="space-y-4">
-                  <h4 className="font-semibold flex items-center gap-2"><Briefcase className="w-4 h-4 text-primary"/> Extracted Info</h4>
-                  <p><strong>Years of Experience:</strong> {details.skills.experienceYears}</p>
-                  <div>
-                    <h5 className="font-medium mb-2 flex items-center gap-2"><Star className="w-4 h-4 text-yellow-500"/> Skills</h5>
-                    <div className="flex flex-wrap gap-2">
-                      {details.skills.skills.length > 0 ? details.skills.skills.map((s, i) => <Badge key={`${s}-${i}`} variant="secondary">{s}</Badge>) : <span className="text-muted-foreground">None found</span>}
+              {isLoadingDetails ? (
+                 <div className="space-y-4 pt-4">
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-4 w-1/3" />
+                    <Skeleton className="h-10 w-full" />
+                 </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                  <div className="space-y-4">
+                    <h4 className="font-semibold flex items-center gap-2"><Briefcase className="w-4 h-4 text-primary"/> Extracted Info</h4>
+                    <p><strong>Years of Experience:</strong> {details.skills?.experienceYears ?? 'N/A'}</p>
+                    <div>
+                      <h5 className="font-medium mb-2 flex items-center gap-2"><Star className="w-4 h-4 text-yellow-500"/> Skills</h5>
+                      <div className="flex flex-wrap gap-2">
+                        {details.skills?.skills?.length > 0 ? details.skills.skills.map((s, i) => <Badge key={`${s}-${i}`} variant="secondary">{s}</Badge>) : <span className="text-muted-foreground">None found</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <h5 className="font-medium mb-2 flex items-center gap-2"><Award className="w-4 h-4 text-blue-500"/> Certifications</h5>
+                      <div className="flex flex-wrap gap-2">
+                        {details.skills?.certifications?.length > 0 ? details.skills.certifications.map((c, i) => <Badge key={`${c}-${i}`} variant="secondary">{c}</Badge>) : <span className="text-muted-foreground">None found</span>}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <h5 className="font-medium mb-2 flex items-center gap-2"><Award className="w-4 h-4 text-blue-500"/> Certifications</h5>
-                    <div className="flex flex-wrap gap-2">
-                      {details.skills.certifications.length > 0 ? details.skills.certifications.map((c, i) => <Badge key={`${c}-${i}`} variant="secondary">{c}</Badge>) : <span className="text-muted-foreground">None found</span>}
+                  <div className="space-y-4">
+                    <h4 className="font-semibold flex items-center gap-2"><Tag className="w-4 h-4 text-primary"/> Keyword Analysis</h4>
+                    <p><strong>Match Score:</strong> {details.keywords?.score ?? 'N/A'}/100</p>
+                    <p><strong>Summary:</strong> {details.keywords?.summary ?? 'Not available.'}</p>
+                    <div>
+                      <h5 className="font-medium mb-2">Matched Keywords</h5>
+                      <div className="flex flex-wrap gap-2">
+                        {details.keywords?.matches?.length > 0 ? details.keywords.matches.map((m, i) => <Badge key={`${m}-${i}`} className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">{m}</Badge>) : <span className="text-muted-foreground">None</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <h5 className="font-medium mb-2">Missing Keywords</h5>
+                      <div className="flex flex-wrap gap-2">
+                        {details.keywords?.missing?.length > 0 ? details.keywords.missing.map((m, i) => <Badge key={`${m}-${i}`} variant="destructive" className="bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300">{m}</Badge>) : <span className="text-muted-foreground">None</span>}
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="space-y-4">
-                  <h4 className="font-semibold flex items-center gap-2"><Tag className="w-4 h-4 text-primary"/> Keyword Analysis</h4>
-                  <p><strong>Match Score:</strong> {details.keywords.score}/100</p>
-                  <p><strong>Summary:</strong> {details.keywords.summary}</p>
-                   <div>
-                    <h5 className="font-medium mb-2">Matched Keywords</h5>
-                    <div className="flex flex-wrap gap-2">
-                      {details.keywords.matches.length > 0 ? details.keywords.matches.map((m, i) => <Badge key={`${m}-${i}`} className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">{m}</Badge>) : <span className="text-muted-foreground">None</span>}
-                    </div>
-                  </div>
-                   <div>
-                    <h5 className="font-medium mb-2">Missing Keywords</h5>
-                    <div className="flex flex-wrap gap-2">
-                      {details.keywords.missing.length > 0 ? details.keywords.missing.map((m, i) => <Badge key={`${m}-${i}`} variant="destructive" className="bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300">{m}</Badge>) : <span className="text-muted-foreground">None</span>}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           </AccordionContent>
         </AccordionItem>
