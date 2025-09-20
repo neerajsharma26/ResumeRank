@@ -247,21 +247,22 @@ export async function updateAndReanalyzeReport(
           const downloadURL = await getDownloadURL(storageRef);
           return { filename: file.filename, url: downloadURL };
         });
-
         const uploadedFiles = await Promise.all(uploadPromises);
 
         // Create one source of truth for all resumes (old and new), ensuring no duplicates.
-        const allResumesMap = new Map<string, { filename: string, url: string, content?: string }>();
+        const allResumesMap = new Map<string, { filename: string; url: string; content?: string }>();
         // Add existing resumes
-        reportData.resumes.forEach((r: any) => allResumesMap.set(r.filename, { ...r, content: '' }));
+        if(reportData.resumes) {
+            reportData.resumes.forEach((r: any) => allResumesMap.set(r.filename, { ...r, content: '' }));
+        }
         // Add/overwrite with new resumes, which have content and a fresh URL
-        newResumes.forEach((r, index) => {
+        newResumes.forEach((r) => {
           const newUrl = uploadedFiles.find(f => f.filename === r.filename)?.url || '';
           allResumesMap.set(r.filename, { ...r, url: newUrl });
         });
         
-        const allResumes = Array.from(allResumesMap.values());
-        const allResumesWithUrls = allResumes.map(({content, ...rest}) => rest);
+        const allResumesWithContent = Array.from(allResumesMap.values());
+        const allResumesWithUrls = allResumesWithContent.map(({content, ...rest}) => rest);
 
         // Update the report with the complete, deduplicated list of resume URLs
         await updateDoc(reportRef, {
@@ -277,7 +278,8 @@ export async function updateAndReanalyzeReport(
         }, {} as AnalysisDetails);
 
         // Analyze *only* the new resumes that have content
-        for (const resume of allResumes.filter(r => r.content)) {
+        const resumesToAnalyze = allResumesWithContent.filter(r => r.content);
+        for (const resume of resumesToAnalyze) {
             enqueue({ type: 'status', message: `Analyzing new resume: ${resume.filename}...` });
             const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content! }));
             const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content!, jobDescription }));
@@ -294,7 +296,7 @@ export async function updateAndReanalyzeReport(
         enqueue({ type: 'status', message: 'Re-ranking all candidates...' });
         
         // Build the ranking list from the single, deduplicated source of truth
-        const resumesForRanking = allResumes.map(r => ({
+        const resumesForRanking = allResumesWithContent.map(r => ({
             filename: r.filename,
             score: allDetails[r.filename]?.keywords?.score || 0,
             highlights: allDetails[r.filename]?.keywords?.summary || 'Awaiting full ranking analysis.',
@@ -304,7 +306,7 @@ export async function updateAndReanalyzeReport(
 
         const existingStatuses = reportData.statuses || {};
         // Add status for new resumes, ensuring not to overwrite existing ones
-        for (const resume of allResumes) {
+        for (const resume of allResumesWithContent) {
             if (!existingStatuses[resume.filename]) {
                 existingStatuses[resume.filename] = 'none';
             }
