@@ -240,19 +240,27 @@ export async function updateAndReanalyzeReport(
         }
         const reportData = reportSnapshot.data();
         const jobDescription = reportData.jobDescription;
-        const existingResumes = (reportData.resumes || []) as {filename: string, url: string}[];
-
+        
+        // --- Single Source of Truth for Resumes ---
+        const allResumesMap = new Map<string, { filename: string, url: string, content?: string }>();
+        // Load existing resumes
+        if (reportData.resumes) {
+          for (const resume of reportData.resumes) {
+            allResumesMap.set(resume.filename, resume);
+          }
+        }
+        // Add/overwrite with new resumes
+        for (const resume of newResumes) {
+            allResumesMap.set(resume.filename, { ...allResumesMap.get(resume.filename), ...resume });
+        }
+        
         enqueue({ type: 'status', message: 'Uploading new resume files...' });
-        const newResumeUrls = await Promise.all(newFiles.map(async (file) => {
-          const storageRef = ref(storage, `resumehire/${userId}/${reportId}/${file.filename}`);
-          await uploadBytes(storageRef, file.data);
-          const downloadURL = await getDownloadURL(storageRef);
-          return { filename: file.filename, url: downloadURL };
-        }));
-
-        const allResumesMap = new Map<string, {filename: string, url: string}>();
-        existingResumes.forEach(r => allResumesMap.set(r.filename, r));
-        newResumeUrls.forEach(r => allResumesMap.set(r.filename, r));
+        for (const file of newFiles) {
+            const storageRef = ref(storage, `resumehire/${userId}/${reportId}/${file.filename}`);
+            await uploadBytes(storageRef, file.data);
+            const downloadURL = await getDownloadURL(storageRef);
+            allResumesMap.set(file.filename, { ...allResumesMap.get(file.filename)!, url: downloadURL });
+        }
         
         const detailsCollectionRef = collection(db, 'users', userId, 'analysisReports', reportId, 'details');
         const detailsSnapshot = await getDocs(detailsCollectionRef);
@@ -261,10 +269,10 @@ export async function updateAndReanalyzeReport(
           return acc;
         }, {});
 
-        const resumesToAnalyze = newResumes.filter(r => !allDetails[r.filename]);
+        const resumesToAnalyze = Array.from(allResumesMap.values()).filter(r => !allDetails[r.filename] && r.content);
 
         if(resumesToAnalyze.length > 0) {
-            enqueue({ type: 'status', message: `Analyzing ${resumesToAnalyze.length} new resumes...` });
+            enqueue({ type: 'status', message: `Analyzing ${resumesToAnalyze.length} new resume(s)...` });
             for (const resume of resumesToAnalyze) {
                 enqueue({ type: 'status', message: `Analyzing new resume: ${resume.filename}...` });
                 const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content! }));
@@ -276,19 +284,26 @@ export async function updateAndReanalyzeReport(
 
                 const detailRef = doc(db, 'users', userId, 'analysisReports', reportId, 'details', resume.filename);
                 await setDoc(detailRef, detailData);
+                enqueue({ type: 'detail', filename: resume.filename, detail: detailData });
             }
         }
-
-        const allResumesForDb = Array.from(allResumesMap.values());
         
-        const allRankedResumes = allResumesForDb.map(r => ({
+        const allResumesForRanking = Array.from(allResumesMap.values()).map(r => ({
             filename: r.filename,
-            score: allDetails[r.filename]?.keywords?.score ?? 0,
-            highlights: allDetails[r.filename]?.keywords?.summary ?? 'Awaiting full ranking analysis.',
+            content: r.content || '' // Ranker needs content; this will be empty for old resumes but that's ok
         }));
 
-        const sortedRankedResumes = [...allRankedResumes].sort((a, b) => b.score - a.score);
-
+        enqueue({ type: 'status', message: 'Ranking all candidates...' });
+        const rankResumesInput: RankResumesInput = {
+            resumes: allResumesForRanking,
+            jobDescription: jobDescription,
+            weights: weights,
+        };
+        const rankedResumes = await retry(() => rankResumesFlow(rankResumesInput));
+        const sortedRankedResumes = [...rankedResumes].sort((a, b) => b.score - a.score);
+        
+        const allResumesForDb = Array.from(allResumesMap.values()).map(({ content, ...rest }) => rest); // Remove content before DB write
+        
         const finalStatuses = { ...reportData.statuses };
         for (const resume of allResumesForDb) {
             if (!finalStatuses[resume.filename]) {
@@ -428,4 +443,6 @@ export async function deleteAnalysisReport(
 }
 
     
+    
+
     
