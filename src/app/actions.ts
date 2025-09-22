@@ -272,7 +272,6 @@ export async function updateAndReanalyzeReport(
             await setDoc(detailRef, detailData);
         }
 
-        // Create a single, deduplicated source of truth for all resumes (old and new)
         const allResumesMap = new Map<string, { filename: string; url: string }>();
         existingResumesWithUrls.forEach((r: any) => allResumesMap.set(r.filename, r));
         uploadedFiles.forEach(f => allResumesMap.set(f.filename, f));
