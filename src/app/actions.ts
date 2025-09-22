@@ -283,8 +283,8 @@ export async function updateAndReanalyzeReport(
         
         const allRankedResumes = allResumesForDb.map(r => ({
             filename: r.filename,
-            score: allDetails[r.filename]?.keywords?.score || 0,
-            highlights: allDetails[r.filename]?.keywords?.summary || 'Awaiting full ranking analysis.',
+            score: allDetails[r.filename]?.keywords?.score ?? 0,
+            highlights: allDetails[r.filename]?.keywords?.summary ?? 'Awaiting full ranking analysis.',
         }));
 
         const sortedRankedResumes = [...allRankedResumes].sort((a, b) => b.score - a.score);
@@ -427,4 +427,5 @@ export async function deleteAnalysisReport(
   }
 }
 
+    
     
