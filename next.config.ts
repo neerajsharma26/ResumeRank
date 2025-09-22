@@ -24,6 +24,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  serverActions: {
+    bodySizeLimit: false,
+  },
 };
 
 export default nextConfig;
