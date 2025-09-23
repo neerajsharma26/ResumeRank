@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import type { Batch, BatchStatus, ResumeV2, BatchDoc } from '@/lib/types';
+import type { Batch, BatchStatus, ResumeV2, BatchDoc, ResumeDoc } from '@/lib/types';
 import { processResumeV2 } from '@/ai/flows/process-resume-v2';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -84,7 +84,7 @@ export async function createBatch(
     const bucket = storage.app.options.storageBucket || STORAGE_BUCKET;
     const fileUrl = `gs://${bucket}/${storagePath}`;
 
-    const newResumeData: Omit<ResumeV2, 'id' | 'lastUpdatedAt'> = {
+    const newResumeData: Omit<ResumeDoc, 'id' | 'lastUpdatedAt'> = {
       resumeId,
       batchId,
       fileUrl,
@@ -109,7 +109,7 @@ export async function createBatch(
   await firestoreBatch.commit();
   
   // Kick off the first processing job asynchronously.
-  processSingleResume(batchId);
+  process.nextTick(() => processSingleResume(batchId));
 
   return batchId;
 }
@@ -117,7 +117,7 @@ export async function createBatch(
 export async function processSingleResume(batchId: string): Promise<void> {
   const workerId = uuidv4();
   let claimedResumeRef: any | null = null;
-  let claimedResumeData: ResumeV2 | null = null;
+  let claimedResumeData: ResumeDoc | null = null;
 
   try {
     // 1. Check batch status before claiming
@@ -127,7 +127,7 @@ export async function processSingleResume(batchId: string): Promise<void> {
       console.log(`Batch ${batchId} does not exist. Worker ${workerId} stopping.`);
       return;
     }
-    const batchData = batchSnap.data() as Batch;
+    const batchData = batchSnap.data() as BatchDoc;
     if (batchData.status === 'paused' || batchData.status === 'cancelled') {
       console.log(`Batch ${batchId} is ${batchData.status}. Worker ${workerId} stopping.`);
       return;
@@ -151,7 +151,7 @@ export async function processSingleResume(batchId: string): Promise<void> {
       const resumeDoc = querySnapshot.docs[0];
       claimedResumeRef = resumeDoc.ref;
       
-      const data = resumeDoc.data() as ResumeV2;
+      const data = resumeDoc.data() as ResumeDoc;
       if (data.status !== 'pending') {
         // Another worker claimed it.
         claimedResumeRef = null;
@@ -165,7 +165,7 @@ export async function processSingleResume(batchId: string): Promise<void> {
         lastUpdatedAt: Timestamp.now(),
       });
       
-      claimedResumeData = { id: resumeDoc.id, ...data } as ResumeV2;
+      claimedResumeData = { id: resumeDoc.id, ...data } as ResumeDoc;
     });
 
     if (!claimedResumeRef || !claimedResumeData) {
@@ -180,7 +180,7 @@ export async function processSingleResume(batchId: string): Promise<void> {
 
     // 3. Re-check batch status after claim (important for pause/cancel)
     const freshBatchSnap = await getDoc(batchRef);
-    const freshBatchData = freshBatchSnap.data() as Batch;
+    const freshBatchData = freshBatchSnap.data() as BatchDoc;
     if (freshBatchData.status !== 'running') {
         await updateDoc(claimedResumeRef, { status: 'pending', workerId: null, startTime: null, lastUpdatedAt: serverTimestamp() });
         console.log(`Batch ${batchId} status changed after claim. Re-queueing resume. Worker ${workerId} stopping.`);
@@ -326,7 +326,7 @@ export async function watchdog() {
     console.log(`Watchdog found ${querySnapshot.size} potentially stuck jobs.`);
 
     for (const resumeDoc of querySnapshot.docs) {
-        const resume = resumeDoc.data() as ResumeV2;
+        const resume = resumeDoc.data() as ResumeDoc;
         const resumeRef = resumeDoc.ref;
         const batchRef = doc(db, 'batches', resume.batchId);
 
@@ -419,3 +419,6 @@ export async function getBatchDetails(userId: string, batchId: string): Promise<
 
     return { batch, resumes };
 }
+
+
+    

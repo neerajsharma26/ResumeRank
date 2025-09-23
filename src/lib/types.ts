@@ -4,7 +4,7 @@ import type {
   MatchKeywordsToResumeOutput,
 } from '@/app/actions';
 import type { z } from 'zod';
-import type { ProcessResumeV2OutputSchema } from '@/ai/flows/process-resume-v2';
+import type { ProcessResumeV2OutputSchema, ScorePackV2 } from '@/ai/flows/process-resume-v2';
 
 export type Resume = {
   filename: string;
@@ -41,7 +41,8 @@ export type ResumeV2Status =
   | 'pending' | 'running' | 'complete' | 'failed'
   | 'timeout' | 'cancelled' | 'paused' | 'skipped_duplicate';
 
-export type BatchDoc = {
+export interface BatchDoc {
+  id: string;
   batchId: string;
   userId: string;
   status: BatchStatus;
@@ -53,15 +54,15 @@ export type BatchDoc = {
   skippedDuplicates: number;
   createdAt: string; // ISO string
   updatedAt: string; // ISO string
-};
+}
+
+export type Batch = BatchDoc; // Alias for UI components
 
 // The full JSON output from the Gemini call
 export type ResumeJSONV2 = z.infer<typeof ProcessResumeV2OutputSchema>;
 
-// The "scores" object within the main JSON output
-export type ScorePackV2 = ResumeJSONV2['scores'];
-
 export interface ResumeDoc {
+  id: string;
   resumeId: string;
   batchId: string;
   fileUrl: string; // gs:// URI
@@ -81,3 +82,7 @@ export interface ResumeDoc {
   } | null;
   error: { code: string; message: string } | null;
 }
+
+export type ResumeV2 = ResumeDoc; // Alias for UI components
+
+    
