@@ -3,6 +3,8 @@ import type {
   ParseResumeSkillsOutput,
   MatchKeywordsToResumeOutput,
 } from '@/app/actions';
+import type { z } from 'zod';
+import type { ProcessResumeV2OutputSchema } from '@/ai/flows/process-resume-v2';
 
 export type Resume = {
   filename: string;
@@ -31,3 +33,50 @@ export interface MetricWeights {
   experience: number;
   education: number;
 }
+
+
+// V2 Pipeline Types
+export type BatchStatus = 'running' | 'paused' | 'cancelled' | 'complete';
+export type ResumeV2Status = 'pending' | 'running' | 'complete' | 'failed' | 'timeout' | 'cancelled' | 'paused' | 'skipped_duplicate';
+
+export type Batch = {
+  batchId: string;
+  userId: string;
+  status: BatchStatus;
+  jobDescription: string;
+  total: number;
+  completed: number;
+  failed: number;
+  cancelledCount: number;
+  skippedDuplicates: number;
+  createdAt: string; // ISO string
+  updatedAt: string; // ISO string
+};
+
+export type ResumeV2Result = z.infer<typeof ProcessResumeV2OutputSchema>;
+
+export type ResumeV2 = {
+  resumeId: string;
+  batchId: string;
+  fileUrl: string; // gs:// URI
+  fileHash: string | null;
+  status: ResumeV2Status;
+  startTime: string | null; // ISO string
+  lastUpdatedAt: string; // ISO string
+  workerId: string | null;
+  retryCount: number;
+  maxRetries: number;
+  result: {
+    json: ResumeV2Result | null;
+    description: string | null;
+    scores: {
+        ats_score: number;
+        skill_match_score: number;
+        education_score: number;
+        experience_score: number;
+    } | null;
+    schemaVersion: number;
+    modelVersion: string;
+  } | null;
+  error: { code: string; message: string } | null;
+};
