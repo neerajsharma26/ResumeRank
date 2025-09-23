@@ -16,10 +16,11 @@ import {
   updateDoc,
   getDoc,
   increment,
+  collectionGroup,
 } from 'firebase/firestore';
 import { ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import type { Batch, BatchStatus, ResumeV2 } from '@/lib/types';
+import type { Batch, BatchStatus, ResumeV2, BatchDoc } from '@/lib/types';
 import { processResumeV2 } from '@/ai/flows/process-resume-v2';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -49,7 +50,7 @@ export async function createBatch(
   let skippedDuplicates = 0;
   const processedHashes = new Set<string>();
 
-  const newBatchData: Omit<Batch, 'id' | 'createdAt' | 'updatedAt'> = {
+  const newBatchData: Omit<BatchDoc, 'id' | 'createdAt' | 'updatedAt'> = {
     batchId,
     userId,
     status: 'running',
@@ -164,7 +165,7 @@ export async function processSingleResume(batchId: string): Promise<void> {
         lastUpdatedAt: Timestamp.now(),
       });
       
-      claimedResumeData = { id: resumeDoc.id, ...data };
+      claimedResumeData = { id: resumeDoc.id, ...data } as ResumeV2;
     });
 
     if (!claimedResumeRef || !claimedResumeData) {
@@ -221,6 +222,8 @@ export async function processSingleResume(batchId: string): Promise<void> {
       if (e.message?.includes('429')) errorCode = 'transient.rate_limited_429';
       if (e.message?.includes('5xx') || e.message?.includes('503')) errorCode = 'transient.server_5xx';
       if (e.message?.includes('timed out')) errorCode = 'transient.network_timeout';
+      if (e.message?.includes('ZodError')) errorCode = 'permanent.schema_mismatch';
+
 
       const isPermanent = errorCode.startsWith('permanent');
       const currentRetryCount = claimedResumeData.retryCount || 0;
@@ -311,12 +314,10 @@ export async function controlBatch(userId: string, batchId: string, action: 'pau
 export async function watchdog() {
     const timeoutThreshold = Timestamp.fromMillis(Date.now() - RUN_TIMEOUT_SEC * 1000);
     
-    // This query is inefficient as it requires a composite index on (status, startTime).
-    // A better approach for a large-scale system is to query batches and then subcollections,
-    // but for this implementation, we'll assume a root-level `resumes` collection for querying is acceptable.
     // NOTE: This will require a composite index on (status, startTime) in Firestore.
+    // The index can be created in the Firebase console.
     const q = query(
-        collection(db, 'resumes'), // Assumes a root-level collection for this query
+        collectionGroup(db, 'resumes'),
         where('status', '==', 'running'),
         where('startTime', '<', timeoutThreshold)
     );
@@ -329,27 +330,33 @@ export async function watchdog() {
         const resumeRef = resumeDoc.ref;
         const batchRef = doc(db, 'batches', resume.batchId);
 
-        if (resume.retryCount < MAX_RETRIES) {
-            await updateDoc(resumeRef, {
-                status: 'pending', // Re-queue
-                retryCount: increment(1),
-                workerId: null,
-                startTime: null,
-                lastUpdatedAt: serverTimestamp(),
-                error: { code: 'timeout', message: `Job timed out after ${RUN_TIMEOUT_SEC} seconds. Re-queued by watchdog.` }
-            });
-             console.log(`Re-queued job ${resumeDoc.id} from batch ${resume.batchId}.`);
-        } else {
-            await updateDoc(resumeRef, {
-                status: 'failed',
-                lastUpdatedAt: serverTimestamp(),
-                error: { code: 'timeout_final', message: `Job failed after ${MAX_RETRIES + 1} attempts including timeouts.` }
-            });
-            await updateDoc(batchRef, { failed: increment(1) });
-            console.log(`Failed job ${resumeDoc.id} from batch ${resume.batchId} due to repeated timeouts.`);
+        try {
+            const currentRetryCount = resume.retryCount || 0;
+            if (currentRetryCount < (resume.maxRetries ?? MAX_RETRIES)) {
+                await updateDoc(resumeRef, {
+                    status: 'pending', // Re-queue
+                    retryCount: increment(1),
+                    workerId: null,
+                    startTime: null,
+                    lastUpdatedAt: serverTimestamp(),
+                    error: { code: 'timeout_watchdog', message: `Job timed out after ${RUN_TIMEOUT_SEC} seconds. Re-queued by watchdog.` }
+                });
+                console.log(`Re-queued job ${resumeDoc.id} from batch ${resume.batchId}.`);
+            } else {
+                await updateDoc(resumeRef, {
+                    status: 'failed',
+                    lastUpdatedAt: serverTimestamp(),
+                    error: { code: 'timeout_final', message: `Job failed after ${MAX_RETRIES + 1} attempts including timeouts.` }
+                });
+                await updateDoc(batchRef, { failed: increment(1), updatedAt: serverTimestamp() });
+                console.log(`Failed job ${resumeDoc.id} from batch ${resume.batchId} due to repeated timeouts.`);
+            }
+        } catch (error) {
+            console.error(`Watchdog failed to update job ${resumeDoc.id}:`, error);
         }
     }
 }
+
 
 export async function getBatches(userId: string): Promise<Batch[]> {
     if (!userId) {
