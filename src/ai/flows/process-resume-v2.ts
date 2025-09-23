@@ -20,6 +20,25 @@ const ProcessResumeV2InputSchema = z.object({
 });
 export type ProcessResumeV2Input = z.infer<typeof ProcessResumeV2InputSchema>;
 
+export const ScoreBreakdownV2 = z.object({
+  skills_match: z.number().min(0).max(25).describe("Score based on skill alignment."),
+  experience_relevance: z.number().min(0).max(25).describe("Score for relevant work experience."),
+  education: z.number().min(0).max(15).describe("Score for educational qualifications."),
+  certifications: z.number().min(0).max(5).describe("Score for relevant certifications."),
+  career_progression: z.number().min(0).max(10).describe("Score based on career growth and stability."),
+  keywords_alignment: z.number().min(0).max(10).describe("Score for keyword optimization against the job description."),
+  formatting_quality: z.number().min(0).max(10).describe("Score for resume clarity and formatting."),
+});
+
+export const ScorePackV2 = z.object({
+  total_score: z.number().min(0).max(100).describe("The final, weighted total score for the candidate."),
+  breakdown: ScoreBreakdownV2.describe("The detailed breakdown of how the total score was calculated."),
+  ats_score: z.number().min(0).max(100).describe("An overall ATS-style score."),
+  skill_match_score: z.number().min(0).max(100).describe("A specific score for skill matching."),
+  education_score: z.number().min(0).max(100).describe("A specific score for education."),
+  experience_score: z.number().min(0).max(100).describe("A specific score for experience.")
+});
+
 export const ProcessResumeV2OutputSchema = z.object({
     candidate_name: z.string().nullable().describe("The candidate's full name."),
     contact: z.object({
@@ -53,15 +72,15 @@ export const ProcessResumeV2OutputSchema = z.object({
     })).describe("A list of the candidate's projects."),
     certifications: z.array(z.string()).describe("A list of the candidate's certifications."),
     description: z.string().describe("A professional, one-paragraph summary of the candidate's profile and fit for the role based on the resume and job description."),
-    scores: z.object({
-        overall_score: z.number().describe("Overall ATS-style score from 0-100, considering all factors."),
-        skill_match_score: z.number().describe("Score (0-100) based on how well the candidate's skills match the job description, considering recency and depth."),
-        experience_score: z.number().describe("Score (0-100) based on relevance, duration, seniority, and impact of the candidate's work experience."),
-        education_score: z.number().describe("Score (0-100) based on the relevance and level of the candidate's education to the job description."),
-        keyword_optimization_score: z.number().describe("Score (0-100) for how well the resume is optimized with keywords from the job description."),
-        clarity_and_formatting_score: z.number().describe("Score (0-100) for the resume's readability, structure, and professional formatting."),
-        job_fit_score: z.number().describe("A holistic score (0-100) indicating the overall fit for the specific job, synthesizing all other factors."),
-    }).describe("A set of 7 ATS-related scores, each out of 100."),
+    scores: ScorePackV2,
+    debug: z.object({
+        debug_mode_enabled: z.boolean(),
+        sources: z.array(z.object({
+            field: z.string(),
+            snippet: z.string(),
+            page: z.number().nullable()
+        }))
+    }).optional().describe("Optional debug information about data extraction sources."),
 });
 export type ProcessResumeV2Output = z.infer<typeof ProcessResumeV2OutputSchema>;
 
