@@ -26,7 +26,7 @@ import { v4 as uuidv4 } from 'uuid';
 // Environment variables / constants
 const RUN_TIMEOUT_SEC = 90;
 const MAX_RETRIES = 3;
-const STORAGE_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'resumerank-8lirw.appspot.com';
+const STORAGE_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'default-bucket';
 
 async function getFileHash(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
@@ -49,7 +49,7 @@ export async function createBatch(
   let skippedDuplicates = 0;
   const processedHashes = new Set<string>();
 
-  const newBatchData: Omit<Batch, 'updatedAt' | 'createdAt'> = {
+  const newBatchData: Omit<Batch, 'id' | 'createdAt' | 'updatedAt'> = {
     batchId,
     userId,
     status: 'running',
@@ -80,9 +80,10 @@ export async function createBatch(
     const storageRef = ref(storage, storagePath);
     await uploadBytes(storageRef, file.data);
 
-    const fileUrl = `gs://${STORAGE_BUCKET}/${storagePath}`;
+    const bucket = storage.app.options.storageBucket || STORAGE_BUCKET;
+    const fileUrl = `gs://${bucket}/${storagePath}`;
 
-    const newResumeData: Omit<ResumeV2, 'lastUpdatedAt'> = {
+    const newResumeData: Omit<ResumeV2, 'id' | 'lastUpdatedAt'> = {
       resumeId,
       batchId,
       fileUrl,
@@ -163,12 +164,12 @@ export async function processSingleResume(batchId: string): Promise<void> {
         lastUpdatedAt: Timestamp.now(),
       });
       
-      claimedResumeData = data;
+      claimedResumeData = { id: resumeDoc.id, ...data };
     });
 
     if (!claimedResumeRef || !claimedResumeData) {
       // Check if the batch is complete
-      const totalProcessed = batchData.completed + batchData.failed + batchData.cancelledCount + batchData.skippedDuplicates;
+      const totalProcessed = (batchData.completed || 0) + (batchData.failed || 0) + (batchData.cancelledCount || 0) + (batchData.skippedDuplicates || 0);
       if (totalProcessed >= batchData.total) {
           await updateDoc(batchRef, { status: 'complete', updatedAt: serverTimestamp() });
           console.log(`Batch ${batchId} completed.`);
@@ -197,11 +198,13 @@ export async function processSingleResume(batchId: string): Promise<void> {
       // 6. On success
       await updateDoc(claimedResumeRef, {
         status: 'complete',
-        'result.json': result,
-        'result.description': result.description,
-        'result.scores': result.scores,
-        'result.schemaVersion': 2,
-        'result.modelVersion': 'gemini-1.5-flash',
+        result: {
+            json: result,
+            description: result.description,
+            scores: result.scores,
+            schemaVersion: 2,
+            modelVersion: 'gemini-1.5-flash',
+        },
         lastUpdatedAt: Timestamp.now(),
         error: null,
       });
@@ -358,12 +361,54 @@ export async function getBatches(userId: string): Promise<Batch[]> {
 
     return querySnapshot.docs.map(doc => {
         const data = doc.data();
+        // Convert Firestore Timestamps to ISO strings for serialization
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString();
+        const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : new Date().toISOString();
+
         return {
+            id: doc.id,
             ...data,
-            createdAt: data.createdAt.toDate().toISOString(),
-            updatedAt: data.updatedAt.toDate().toISOString(),
+            createdAt,
+            updatedAt,
         } as Batch;
     });
 }
-
     
+export async function getBatchDetails(userId: string, batchId: string): Promise<{ batch: Batch, resumes: ResumeV2[] } | null> {
+    if (!userId || !batchId) {
+        throw new Error('User or Batch ID not provided');
+    }
+    
+    const batchRef = doc(db, 'batches', batchId);
+    const batchSnap = await getDoc(batchRef);
+
+    if (!batchSnap.exists() || batchSnap.data().userId !== userId) {
+        console.error('Permission denied or batch not found for getBatchDetails.');
+        return null;
+    }
+
+    const batchData = batchSnap.data();
+    const batch = {
+        id: batchSnap.id,
+        ...batchData,
+        createdAt: batchData.createdAt.toDate().toISOString(),
+        updatedAt: batchData.updatedAt.toDate().toISOString(),
+    } as Batch;
+
+
+    const resumesRef = collection(db, 'batches', batchId, 'resumes');
+    const q = query(resumesRef, orderBy('lastUpdatedAt', 'desc'));
+    const resumesSnapshot = await getDocs(q);
+    
+    const resumes = resumesSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            startTime: data.startTime ? data.startTime.toDate().toISOString() : null,
+            lastUpdatedAt: data.lastUpdatedAt.toDate().toISOString(),
+        } as ResumeV2;
+    });
+
+    return { batch, resumes };
+}
