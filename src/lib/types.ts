@@ -70,10 +70,13 @@ export type ResumeV2 = {
     json: ResumeV2Result | null;
     description: string | null;
     scores: {
-        ats_score: number;
+        overall_score: number;
         skill_match_score: number;
-        education_score: number;
         experience_score: number;
+        education_score: number;
+        keyword_optimization_score: number;
+        clarity_and_formatting_score: number;
+        job_fit_score: number;
     } | null;
     schemaVersion: number;
     modelVersion: string;

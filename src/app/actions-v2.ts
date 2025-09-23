@@ -45,7 +45,6 @@ export async function createBatch(
   const resumesRef = collection(batchRef, 'resumes');
   const firestoreBatch = writeBatch(db);
 
-  const now = new Date();
   let skippedDuplicates = 0;
   const processedHashes = new Set<string>();
 
@@ -106,7 +105,7 @@ export async function createBatch(
 
   await firestoreBatch.commit();
   
-  // Kick off the first processing job async
+  // Kick off the first processing job asynchronously.
   processSingleResume(batchId);
 
   return batchId;
@@ -128,20 +127,20 @@ export async function processSingleResume(batchId: string): Promise<void> {
       const q = query(
         collection(db, 'batches', batchId, 'resumes'),
         where('status', '==', 'pending'),
-        orderBy('lastUpdatedAt'),
+        orderBy('lastUpdatedAt'), // Using lastUpdatedAt to roughly approximate FIFO
         limit(1)
       );
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
         // No pending resumes left.
-        console.log(`No pending resumes in batch ${batchId}. Worker ${workerId} stopping.`);
         return;
       }
 
       const resumeDoc = querySnapshot.docs[0];
       const resumeRef = resumeDoc.ref;
 
+      // Atomically claim the job
       transaction.update(resumeRef, {
         status: 'running',
         workerId: workerId,
@@ -161,6 +160,7 @@ export async function processSingleResume(batchId: string): Promise<void> {
         const batchDoc = await getDoc(batchRef);
         const jobDescription = batchDoc.data()?.jobDescription || '';
 
+        // Single Gemini call
         const result = await processResumeV2({ resumePdfUrl: fileUrl, jobDescription });
 
         await updateDoc(resumeRef, {
@@ -168,7 +168,7 @@ export async function processSingleResume(batchId: string): Promise<void> {
           'result.json': result,
           'result.description': result.description,
           'result.scores': result.scores,
-          'result.schemaVersion': 1,
+          'result.schemaVersion': 2,
           'result.modelVersion': 'gemini-1.5-flash',
           lastUpdatedAt: Timestamp.now(),
           error: null,
@@ -176,13 +176,18 @@ export async function processSingleResume(batchId: string): Promise<void> {
 
         await updateDoc(batchRef, {
             completed: increment(1),
-            updatedAt: Timestamp.now()
+            updatedAt: serverTimestamp()
         });
 
       } catch (e: any) {
         console.error(`Error processing resume ${resumeId} in batch ${batchId}:`, e);
         const currentDoc = await getDoc(resumeRef);
         const currentData = currentDoc.data() as ResumeV2;
+        
+        let errorCode = 'transient_error';
+        if (e.message?.includes('429')) errorCode = 'transient.rate_limited_429';
+        if (e.message?.includes('5xx')) errorCode = 'transient.server_5xx';
+
 
         if (currentData.retryCount < MAX_RETRIES) {
           // Requeue for retry with backoff
@@ -192,8 +197,7 @@ export async function processSingleResume(batchId: string): Promise<void> {
             workerId: null,
             startTime: null,
             lastUpdatedAt: Timestamp.now(),
-            'error.code': 'transient_error',
-            'error.message': e.message || 'Unknown processing error',
+            error: { code: errorCode, message: e.message || 'Unknown processing error' },
           });
         } else {
           // Max retries reached, mark as failed
@@ -202,12 +206,11 @@ export async function processSingleResume(batchId: string): Promise<void> {
             workerId: null,
             startTime: null,
             lastUpdatedAt: Timestamp.now(),
-            'error.code': 'permanent_failure',
-            'error.message': `Max retries (${MAX_RETRIES}) reached. Last error: ${e.message || 'Unknown'}`,
+            error: { code: 'permanent_failure', message: `Max retries (${MAX_RETRIES}) reached. Last error: ${e.message || 'Unknown'}` },
           });
           await updateDoc(batchRef, {
             failed: increment(1),
-            updatedAt: Timestamp.now()
+            updatedAt: serverTimestamp()
           });
         }
       }
@@ -218,15 +221,18 @@ export async function processSingleResume(batchId: string): Promise<void> {
 
   // After processing (or if no resume was claimed), check if we should continue
   const finalBatchDoc = await getDoc(doc(db, 'batches', batchId));
+  if (!finalBatchDoc.exists()) return;
+
   const batchData = finalBatchDoc.data() as Batch;
+
   if(batchData.status === 'running') {
       const totalProcessed = batchData.completed + batchData.failed + batchData.cancelledCount + batchData.skippedDuplicates;
       if (totalProcessed >= batchData.total) {
-          await updateDoc(finalBatchDoc.ref, { status: 'complete', updatedAt: Timestamp.now() });
+          await updateDoc(finalBatchDoc.ref, { status: 'complete', updatedAt: serverTimestamp() });
           console.log(`Batch ${batchId} completed.`);
       } else {
-          // Self-re-invoke to process the next item
-          processSingleResume(batchId);
+          // Self-re-invoke to process the next item in the queue.
+          process.nextTick(() => processSingleResume(batchId));
       }
   }
 }
@@ -240,20 +246,24 @@ export async function controlBatch(userId: string, batchId: string, action: 'pau
             throw new Error('Permission denied or batch not found.');
         }
 
+        const currentStatus = batchDoc.data().status;
         let newStatus: BatchStatus;
         switch (action) {
             case 'pause':
-                newStatus = 'paused';
+                if (currentStatus === 'running') newStatus = 'paused';
+                else return; // Can only pause a running batch
                 break;
             case 'resume':
-                newStatus = 'running';
+                if (currentStatus === 'paused') newStatus = 'running';
+                else return; // Can only resume a paused batch
                 break;
             case 'cancel':
-                newStatus = 'cancelled';
+                if (currentStatus === 'running' || currentStatus === 'paused') newStatus = 'cancelled';
+                else return; // Can only cancel running or paused batches
                 break;
         }
 
-        transaction.update(batchRef, { status: newStatus, updatedAt: Timestamp.now() });
+        transaction.update(batchRef, { status: newStatus, updatedAt: serverTimestamp() });
 
         if (action === 'cancel') {
             const resumesRef = collection(batchRef, 'resumes');
@@ -270,18 +280,22 @@ export async function controlBatch(userId: string, batchId: string, action: 'pau
 
     if (action === 'resume') {
         // Kick off a worker to resume processing
-        processSingleResume(batchId);
+        process.nextTick(() => processSingleResume(batchId));
     }
 }
 
 // Watchdog function to be run on a schedule (e.g., via Cloud Scheduler)
 export async function watchdog() {
-    const fiveMinutesAgo = Timestamp.fromMillis(Date.now() - RUN_TIMEOUT_SEC * 1000);
+    const timeoutThreshold = Timestamp.fromMillis(Date.now() - RUN_TIMEOUT_SEC * 1000);
+    
+    // This query is inefficient as it requires a composite index on (status, startTime).
+    // A better approach for a large-scale system is to query batches and then subcollections,
+    // but for this implementation, we'll assume a root-level `resumes` collection for querying is acceptable.
+    // NOTE: This will require a composite index on (status, startTime) in Firestore.
     const q = query(
-        collection(db, 'resumes'), // This assumes a root collection for resumes for querying.
-                                    // For subcollections, you'd need to iterate through batches.
+        collection(db, 'resumes'),
         where('status', '==', 'running'),
-        where('startTime', '<', fiveMinutesAgo)
+        where('startTime', '<', timeoutThreshold)
     );
 
     const querySnapshot = await getDocs(q);
@@ -290,26 +304,25 @@ export async function watchdog() {
     for (const resumeDoc of querySnapshot.docs) {
         const resume = resumeDoc.data() as ResumeV2;
         const resumeRef = resumeDoc.ref;
+        const batchRef = doc(db, 'batches', resume.batchId);
 
         if (resume.retryCount < MAX_RETRIES) {
             await updateDoc(resumeRef, {
-                status: 'pending',
+                status: 'pending', // Re-queue
                 retryCount: increment(1),
                 workerId: null,
                 startTime: null,
-                lastUpdatedAt: Timestamp.now(),
-                'error.code': 'timeout',
-                'error.message': `Job timed out after ${RUN_TIMEOUT_SEC} seconds. Re-queued by watchdog.`
+                lastUpdatedAt: serverTimestamp(),
+                error: { code: 'timeout', message: `Job timed out after ${RUN_TIMEOUT_SEC} seconds. Re-queued by watchdog.` }
             });
              console.log(`Re-queued job ${resumeDoc.id} from batch ${resume.batchId}.`);
         } else {
             await updateDoc(resumeRef, {
                 status: 'failed',
-                lastUpdatedAt: Timestamp.now(),
-                'error.code': 'timeout_final',
-                'error.message': `Job failed after ${MAX_RETRIES + 1} attempts including timeouts.`
+                lastUpdatedAt: serverTimestamp(),
+                error: { code: 'timeout_final', message: `Job failed after ${MAX_RETRIES + 1} attempts including timeouts.` }
             });
-            await updateDoc(doc(db, 'batches', resume.batchId), { failed: increment(1) });
+            await updateDoc(batchRef, { failed: increment(1) });
             console.log(`Failed job ${resumeDoc.id} from batch ${resume.batchId} due to repeated timeouts.`);
         }
     }
