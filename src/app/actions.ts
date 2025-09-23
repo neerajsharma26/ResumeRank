@@ -267,7 +267,7 @@ export async function updateAndReanalyzeReport(
         const allDetails: AnalysisDetails = detailsSnapshot.docs.reduce((acc, detailDoc) => {
           acc[detailDoc.id] = detailDoc.data() as AnalysisDetails[string];
           return acc;
-        }, {});
+        }, {} as AnalysisDetails);
 
         const resumesToAnalyze = Array.from(allResumesMap.values()).filter(r => !allDetails[r.filename] && r.content);
 
