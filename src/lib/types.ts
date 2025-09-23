@@ -86,3 +86,5 @@ export interface ResumeDoc {
 export type ResumeV2 = ResumeDoc; // Alias for UI components
 
     
+
+    

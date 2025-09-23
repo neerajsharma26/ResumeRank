@@ -47,71 +47,78 @@ export async function createBatch(
   const resumesRef = collection(batchRef, 'resumes');
   const firestoreBatch = writeBatch(db);
 
-  let skippedDuplicates = 0;
-  const processedHashes = new Set<string>();
+  try {
+    let skippedDuplicates = 0;
+    const processedHashes = new Set<string>();
 
-  const newBatchData: Omit<BatchDoc, 'id' | 'createdAt' | 'updatedAt'> = {
-    batchId,
-    userId,
-    status: 'running',
-    jobDescription,
-    total: files.length,
-    completed: 0,
-    failed: 0,
-    cancelledCount: 0,
-    skippedDuplicates: 0,
-  };
-
-  firestoreBatch.set(batchRef, {
-    ...newBatchData,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-
-  for (const file of files) {
-    const fileHash = await getFileHash(file.originalFile);
-    if (processedHashes.has(fileHash)) {
-        skippedDuplicates++;
-        continue;
-    }
-    processedHashes.add(fileHash);
-
-    const resumeId = uuidv4();
-    const storagePath = `resumes_v2/${batchId}/${resumeId}_${file.filename}`;
-    const storageRef = ref(storage, storagePath);
-    await uploadBytes(storageRef, file.data);
-
-    const bucket = storage.app.options.storageBucket || STORAGE_BUCKET;
-    const fileUrl = `gs://${bucket}/${storagePath}`;
-
-    const newResumeData: Omit<ResumeDoc, 'id' | 'lastUpdatedAt'> = {
-      resumeId,
+    const newBatchData: Omit<BatchDoc, 'id' | 'createdAt' | 'updatedAt'> = {
       batchId,
-      fileUrl,
-      fileHash,
-      status: 'pending',
-      startTime: null,
-      workerId: null,
-      retryCount: 0,
-      maxRetries: MAX_RETRIES,
-      result: null,
-      error: null,
+      userId,
+      status: 'running',
+      jobDescription,
+      total: files.length,
+      completed: 0,
+      failed: 0,
+      cancelledCount: 0,
+      skippedDuplicates: 0,
     };
 
-    firestoreBatch.set(doc(resumesRef, resumeId), {
-      ...newResumeData,
-      lastUpdatedAt: serverTimestamp(),
+    firestoreBatch.set(batchRef, {
+      ...newBatchData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
+
+    for (const file of files) {
+      const fileHash = await getFileHash(file.originalFile);
+      if (processedHashes.has(fileHash)) {
+          skippedDuplicates++;
+          continue;
+      }
+      processedHashes.add(fileHash);
+
+      const resumeId = uuidv4();
+      const storagePath = `resumes_v2/${batchId}/${resumeId}_${file.filename}`;
+      const storageRef = ref(storage, storagePath);
+      await uploadBytes(storageRef, file.data);
+
+      const bucket = storage.app.options.storageBucket || STORAGE_BUCKET;
+      const fileUrl = `gs://${bucket}/${storagePath}`;
+
+      const newResumeData: Omit<ResumeDoc, 'id' | 'lastUpdatedAt'> = {
+        resumeId,
+        batchId,
+        fileUrl,
+        fileHash,
+        status: 'pending',
+        startTime: null,
+        workerId: null,
+        retryCount: 0,
+        maxRetries: MAX_RETRIES,
+        result: null,
+        error: null,
+      };
+
+      firestoreBatch.set(doc(resumesRef, resumeId), {
+        ...newResumeData,
+        lastUpdatedAt: serverTimestamp(),
+      });
+    }
+    
+    firestoreBatch.update(batchRef, { skippedDuplicates });
+
+    await firestoreBatch.commit();
+    
+    // Kick off the first processing job asynchronously.
+    process.nextTick(() => processSingleResume(batchId));
+
+    return batchId;
+  } catch (error: any) {
+      console.error("Error creating batch:", error);
+      // In a real app, you'd want to handle this more gracefully,
+      // maybe by cleaning up the created batch document or marking it as failed.
+      throw new Error(`Failed to create batch: ${error.message}`);
   }
-  
-  firestoreBatch.update(batchRef, { skippedDuplicates });
-
-  await firestoreBatch.commit();
-  
-  // Kick off the first processing job asynchronously.
-  process.nextTick(() => processSingleResume(batchId));
-
-  return batchId;
 }
 
 export async function processSingleResume(batchId: string): Promise<void> {
@@ -420,6 +427,8 @@ export async function getBatchDetails(userId: string, batchId: string): Promise<
     return { batch, resumes };
 }
 
+
+    
 
     
 
