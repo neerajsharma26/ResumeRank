@@ -37,9 +37,11 @@ export interface MetricWeights {
 
 // V2 Pipeline Types
 export type BatchStatus = 'running' | 'paused' | 'cancelled' | 'complete';
-export type ResumeV2Status = 'pending' | 'running' | 'complete' | 'failed' | 'timeout' | 'cancelled' | 'paused' | 'skipped_duplicate';
+export type ResumeV2Status =
+  | 'pending' | 'running' | 'complete' | 'failed'
+  | 'timeout' | 'cancelled' | 'paused' | 'skipped_duplicate';
 
-export type Batch = {
+export type BatchDoc = {
   batchId: string;
   userId: string;
   status: BatchStatus;
@@ -53,9 +55,13 @@ export type Batch = {
   updatedAt: string; // ISO string
 };
 
-export type ResumeV2Result = z.infer<typeof ProcessResumeV2OutputSchema>;
+// The full JSON output from the Gemini call
+export type ResumeJSONV2 = z.infer<typeof ProcessResumeV2OutputSchema>;
 
-export type ResumeV2 = {
+// The "scores" object within the main JSON output
+export type ScorePackV2 = ResumeJSONV2['scores'];
+
+export interface ResumeDoc {
   resumeId: string;
   batchId: string;
   fileUrl: string; // gs:// URI
@@ -67,19 +73,11 @@ export type ResumeV2 = {
   retryCount: number;
   maxRetries: number;
   result: {
-    json: ResumeV2Result | null;
+    json: ResumeJSONV2 | null;
     description: string | null;
-    scores: {
-        overall_score: number;
-        skill_match_score: number;
-        experience_score: number;
-        education_score: number;
-        keyword_optimization_score: number;
-        clarity_and_formatting_score: number;
-        job_fit_score: number;
-    } | null;
+    scores: ScorePackV2 | null;
     schemaVersion: number;
     modelVersion: string;
   } | null;
   error: { code: string; message: string } | null;
-};
+}
