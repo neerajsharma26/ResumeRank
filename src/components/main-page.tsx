@@ -19,9 +19,8 @@ import { Label } from '@/components/ui/label';
 import { formatDistanceToNow } from 'date-fns';
 import { Checkbox } from './ui/checkbox';
 import CandidateCard from './candidate-card';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
-import { updateAnalysisReportStatus } from '@/app/actions';
-
+import { Tabs, TabsList, TabsContent } from './ui/tabs';
+import { updateAnalysisReportStatus, analyzeSingleResumeAction } from '@/app/actions';
 const pdfjsLibPromise = import('pdfjs-dist');
 let pdfjsLib: typeof PdfJs | null = null;
 pdfjsLibPromise.then(lib => {
@@ -76,6 +75,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   const jdFileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [showReanalyzeUI, setShowReanalyzeUI] = React.useState(false);
+  const [abortController, setAbortController] = React.useState<AbortController | null>(null);
 
 
   const { toast } = useToast();
@@ -149,90 +149,160 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
     return { filename: file.name, content };
   };
 
-  const processStream = async (stream: ReadableStream) => {
+  const processStream = async (stream: ReadableStream, options?: { signal?: AbortSignal, onEvent?: (event: any) => void }) => {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
 
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (line.trim() === '') continue;
-        try {
-          const chunk = JSON.parse(line);
-          if (chunk.type === 'status') {
-            setLoadingStatus(chunk.message);
-          } else if (chunk.type === 'done') {
-            onAnalysisComplete(chunk.report);
-            setShowReanalyzeUI(false); // Hide UI after completion
-            return; // Exit the loop
-          } else if (chunk.type === 'error') {
-            throw new Error(chunk.error);
-          }
-        } catch (e) {
-          console.error('Failed to parse stream chunk:', line, e);
+        if (options?.signal?.aborted) {
+            reader.cancel();
+            break;
         }
-      }
-    }
-  };
 
- const handleAnalyze = async () => {
-    if (!user?.uid) {
-      toast({ title: 'Authentication Required', variant: 'destructive' });
-      return;
-    }
-    if (resumeFiles.length === 0) {
-      toast({ title: 'No Resumes', description: 'Please upload at least one resume.', variant: 'destructive' });
-      return;
-    }
-    let currentJobDescription = jobDescription;
-    if (jobDescriptionFile.length > 0) {
-      try {
-        currentJobDescription = await fileToText(jobDescriptionFile[0]);
-      } catch (error) {
-        toast({ title: 'Error Reading Job Description', variant: 'destructive' });
-        return;
-      }
-    }
-    if (!currentJobDescription.trim()) {
-      toast({ title: 'No Job Description', variant: 'destructive' });
-      return;
-    }
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    setIsLoading(true);
-    setLoadingStatus('Preparing analysis...');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
+        for (const line of lines) {
+            if (line.trim() === '') continue;
+            try {
+                const chunk = JSON.parse(line);
+                if (options?.onEvent) {
+                    options.onEvent(chunk);
+                }
+                if (chunk.type === 'status') {
+                    setLoadingStatus(chunk.message);
+                } else if (chunk.type === 'done') {
+                    onAnalysisComplete(chunk.report);
+                    if (!options?.signal?.aborted) setShowReanalyzeUI(false);
+                    return; 
+                } else if (chunk.type === 'error') {
+                    throw new Error(chunk.error);
+                }
+            } catch (e) {
+                console.error('Failed to parse stream chunk:', line, e);
+            }
+        }
+    }
+};
+
+const handleAnalyze = async () => {
+  if (!user?.uid) {
+    toast({ title: 'Authentication Required', variant: 'destructive' });
+    return;
+  }
+  if (resumeFiles.length === 0) {
+    toast({ title: 'No Resumes', description: 'Please upload at least one resume.', variant: 'destructive' });
+    return;
+  }
+
+  // --- Resolve JD text once ---
+  let currentJobDescription = jobDescription;
+  if (jobDescriptionFile.length > 0) {
     try {
-      const resumes = await Promise.all(resumeFiles.map(fileToResume));
-      const filesForUpload = await Promise.all(
-        [...resumeFiles, ...jobDescriptionFile].map(async (file) => ({
-          filename: file.name,
-          data: await file.arrayBuffer(),
-        }))
-      );
-
-      const stream = await analyzeResumesAction(currentJobDescription, resumes, weights, user.uid, filesForUpload);
-      await processStream(stream);
-
-    } catch (e: any) {
-      console.error(e);
-      toast({
-        title: 'Analysis Failed',
-        description: e.message || 'An unexpected error occurred.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-      setLoadingStatus('');
+      currentJobDescription = await fileToText(jobDescriptionFile[0]);
+    } catch {
+      toast({ title: 'Error Reading Job Description', variant: 'destructive' });
+      return;
     }
-  };
-  
+  }
+  if (!currentJobDescription.trim()) {
+    toast({ title: 'No Job Description', variant: 'destructive' });
+    return;
+  }
+
+  setIsLoading(true);
+  setLoadingStatus('Preparing analysis...');
+
+  try {
+    // Light-weight meta for each resume (must include filename + content for flows)
+    const resumeMetas = await Promise.all(resumeFiles.map(fileToResume));
+
+    // Optional: allow cancel
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    // We will reuse the same report; first call will create it and return reportId
+    let reportId: string | undefined;
+
+    // Process ONE resume at a time
+    for (let i = 0; i < resumeFiles.length; i++) {
+      if (controller.signal.aborted) {
+          toast({ title: 'Analysis Cancelled' });
+          break;
+      }
+      const file = resumeFiles[i];
+      const meta = resumeMetas[i];
+
+      setLoadingStatus(`Analyzing ${i + 1}/${resumeFiles.length}: ${file.name}`);
+
+      // Prepare only this file for upload
+      const singleFilePayload = {
+        filename: file.name,
+        data: await file.arrayBuffer(),
+      };
+
+      try {
+        // Call single-resume action (append to existing report if we have reportId)
+        const stream = await analyzeSingleResumeAction(
+          currentJobDescription,
+          meta,
+          weights,
+          user.uid,
+          singleFilePayload,
+          reportId ? { reportId } : undefined
+        );
+
+        // Read server events; capture reportId from the first call
+        await processStream(stream, {
+          signal: controller.signal,
+          onEvent: (evt: any) => {
+            if (evt?.type === 'reportId' && !reportId) {
+              reportId = evt.id; // subsequent resumes append to same report
+            }
+            if (evt?.type === 'done') {
+                onAnalysisComplete(evt.report);
+            }
+          },
+        });
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+            console.log('Analysis of a file was aborted.');
+            break;
+        }
+        console.error('Failed:', file.name, err);
+        toast({
+          title: `Failed: ${file.name}`,
+          description: err?.message ?? 'Unexpected error',
+          variant: 'destructive',
+        });
+        // continue with next resume
+      }
+    }
+
+    if (!controller.signal.aborted) {
+        setLoadingStatus('All done ✔️');
+        toast({ title: 'Analysis complete' });
+    }
+
+  } catch (e: any) {
+    console.error(e);
+    toast({
+      title: 'Analysis Failed',
+      description: e.message || 'An unexpected error occurred.',
+      variant: 'destructive',
+    });
+  } finally {
+    setIsLoading(false);
+    setLoadingStatus('');
+    setAbortController(null);
+  }
+};
+
   const handleReanalyze = async () => {
     if (!user?.uid || !analysisResult?.id) {
       toast({ title: 'Authentication or Report ID missing', variant: 'destructive' });
@@ -745,3 +815,5 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
     </div>
   );
 }
+
+    

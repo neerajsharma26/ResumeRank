@@ -51,166 +51,313 @@ export type {
   Report
 };
 
-async function retry<T>(fn: () => Promise<T>): Promise<T> {
-  let lastError: Error | undefined;
-  for (let i = 0; i < 5; i++) {
-    try {
-      return await fn();
-    } catch (e: any) {
-      lastError = e;
-      if (e.message?.includes('429') || e.message?.includes('503')) {
-         if (i < 4) { 
-          const delay = 2000 * Math.pow(2, i);
-          console.log(`Attempt ${i + 1} failed with ${e.message}. Retrying in ${delay}ms...`);
-          await new Promise(res => setTimeout(res, delay));
-        }
-      } else {
-        throw e;
-      }
-    }
+// async function retry<T>(fn: () => Promise<T>): Promise<T> {
+//   let lastError: Error | undefined;
+//   for (let i = 0; i < 5; i++) {
+//     try {
+//       return await fn();
+//     } catch (e: any) {
+//       lastError = e;
+//       if (e.message?.includes('429') || e.message?.includes('503')) {
+//          if (i < 4) { 
+//           const delay = 2000 * Math.pow(2, i);
+//           console.log(`Attempt ${i + 1} failed with ${e.message}. Retrying in ${delay}ms...`);
+//           await new Promise(res => setTimeout(res, delay));
+//         }
+//       } else {
+//         throw e;
+//       }
+//     }
+//   }
+//   throw lastError;
+// }
+
+
+// export async function analyzeResumesAction(
+//   jobDescription: string,
+//   resumes: Resume[],
+//   weights: MetricWeights,
+//   userId: string,
+//   files: {filename: string; data: ArrayBuffer}[]
+// ): Promise<ReadableStream<any>> {
+//     const stream = new ReadableStream({
+//     async start(controller) {
+//       const encoder = new TextEncoder();
+//       const enqueue = (data: object) => {
+//         controller.enqueue(encoder.encode(JSON.stringify(data) + '\n'));
+//       };
+
+//       try {
+//         if (!jobDescription.trim()) {
+//             throw new Error('Job description cannot be empty.');
+//         }
+//         if (resumes.length === 0) {
+//             throw new Error('Please select at least one resume to analyze.');
+//         }
+
+//         enqueue({ type: 'status', message: 'Creating analysis report...' });
+
+//         const initialReportData = {
+//             jobDescription,
+//             rankedResumes: [],
+//             statuses: {},
+//             createdAt: serverTimestamp(),
+//             resumes: resumes.map(r => ({ filename: r.filename, url: '' }))
+//         };
+
+//         const reportRef = await addDoc(collection(db, 'users', userId, 'analysisReports'), initialReportData);
+//         enqueue({ type: 'reportId', id: reportRef.id });
+
+
+//         enqueue({ type: 'status', message: 'Uploading resume files...' });
+//         const uploadPromises = files.map(async file => {
+//             const storageRef = ref(storage, `resumehire/${userId}/${reportRef.id}/${file.filename}`);
+//             await uploadBytes(storageRef, file.data);
+//             const downloadURL = await getDownloadURL(storageRef);
+//             return { filename: file.filename, url: downloadURL };
+//         });
+
+//         const uploadedFiles = await Promise.all(uploadPromises);
+//         const fileUrlMap = uploadedFiles.reduce((acc, file) => {
+//             acc[file.filename] = file.url;
+//             return acc;
+//         }, {} as Record<string, string>);
+
+//         const finalResumesWithUrls = resumes.map(r => ({
+//             filename: r.filename,
+//             url: fileUrlMap[r.filename] || ''
+//         }));
+
+//         await updateDoc(reportRef, { resumes: finalResumesWithUrls });
+//         enqueue({ type: 'resumes', resumes: finalResumesWithUrls });
+
+
+//         const batchSize = 4;
+//         let allDetails: AnalysisDetails = {};
+        
+//         for (let i = 0; i < resumes.length; i += batchSize) {
+//             const batch = resumes.slice(i, i + batchSize);
+//             enqueue({ type: 'status', message: `Analyzing batch ${i / batchSize + 1} of ${Math.ceil(resumes.length / batchSize)}...` });
+
+//             const detailPromises = batch.map(async (resume) => {
+//                 enqueue({ type: 'status', message: `Parsing skills for ${resume.filename}...` });
+//                 const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content }));
+                
+//                 enqueue({ type: 'status', message: `Matching keywords for ${resume.filename}...` });
+//                 const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
+                
+//                 const [skills, keywords] = await Promise.all([skillsPromise, keywordsPromise]);
+                
+//                 const detail = { skills, keywords };
+//                 enqueue({ type: 'detail', filename: resume.filename, detail });
+                
+//                 return { filename: resume.filename, ...detail };
+//             });
+
+//             const detailsArray = await Promise.all(detailPromises);
+            
+//             const batchDetails = detailsArray.reduce((acc, detail) => {
+//                 acc[detail.filename] = { skills: detail.skills, keywords: detail.keywords };
+//                 return acc;
+//             }, {} as AnalysisDetails);
+
+//             allDetails = { ...allDetails, ...batchDetails };
+//         }
+        
+//         enqueue({ type: 'status', message: 'Saving analysis details...' });
+//         const detailsBatch = writeBatch(db);
+//         for (const [filename, detailData] of Object.entries(allDetails)) {
+//             const detailRef = doc(db, 'users', userId, 'analysisReports', reportRef.id, 'details', filename);
+//             detailsBatch.set(detailRef, detailData);
+//         }
+//         await detailsBatch.commit();
+        
+//         enqueue({ type: 'status', message: 'Ranking candidates...' });
+        
+//         const rankResumesInput: RankResumesInput = {
+//             resumes: resumes,
+//             jobDescription: jobDescription,
+//             weights: weights,
+//         };
+//         const rankedResumes = await retry(() => rankResumesFlow(rankResumesInput));
+//         const sortedRankedResumes = [...rankedResumes].sort((a, b) => b.score - a.score);
+        
+//         const statuses = sortedRankedResumes.reduce((acc, r) => {
+//           acc[r.filename] = 'none';
+//           return acc;
+//         }, {} as Record<string, CandidateStatus>);
+        
+//         await updateDoc(reportRef, { rankedResumes: sortedRankedResumes, statuses });
+        
+//         enqueue({ type: 'status', message: 'Finalizing report...' });
+
+//         const finalDocSnapshot = await getDoc(reportRef);
+//         const finalDocData = finalDocSnapshot.data();
+
+//         const finalReport: Report = {
+//             id: reportRef.id,
+//             jobDescription,
+//             rankedResumes: sortedRankedResumes,
+//             resumes: finalResumesWithUrls,
+//             details: allDetails,
+//             statuses,
+//             createdAt: (finalDocData?.createdAt?.toDate() ?? new Date()).toISOString(),
+//         };
+
+//         enqueue({ type: 'done', report: finalReport });
+//         controller.close();
+
+//       } catch (e: any) {
+//         console.error('Error in analyzeResumesAction stream:', e);
+//         enqueue({ type: 'error', error: e.message || 'An unexpected error occurred during analysis.' });
+//         controller.close();
+//       }
+//     }
+//   });
+
+//   return stream;
+// }
+
+async function retry<T>(fn: () => Promise<T>, tries = 3, delayMs = 800): Promise<T> {
+  let lastErr: any;
+  for (let i = 0; i < tries; i++) {
+    try { return await fn(); } catch (e) { lastErr = e; if (i < tries - 1) await new Promise(r => setTimeout(r, delayMs)); }
   }
-  throw lastError;
+  throw lastErr;
 }
 
-
-export async function analyzeResumesAction(
+/**
+ * Single-resume analysis stream.
+ * - If reportId is provided, append into that report.
+ * - Else, creates a new report and returns its id in stream.
+ */
+export async function analyzeSingleResumeAction(
   jobDescription: string,
-  resumes: Resume[],
+  resume: Resume, // must contain filename (+ content if your flows need text)
   weights: MetricWeights,
   userId: string,
-  files: {filename: string; data: ArrayBuffer}[]
+  file: { filename: string; data: ArrayBuffer },
+  opts?: { reportId?: string } // optional existing report to append
 ): Promise<ReadableStream<any>> {
-    const stream = new ReadableStream({
+
+  const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
-      const enqueue = (data: object) => {
-        controller.enqueue(encoder.encode(JSON.stringify(data) + '\n'));
-      };
+      const send = (obj: object) => controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n'));
 
       try {
-        if (!jobDescription.trim()) {
-            throw new Error('Job description cannot be empty.');
-        }
-        if (resumes.length === 0) {
-            throw new Error('Please select at least one resume to analyze.');
-        }
+        // ---- validations
+        if (!userId) throw new Error('Unauthenticated');
+        if (!jobDescription?.trim()) throw new Error('Job description cannot be empty.');
+        if (!resume?.filename) throw new Error('Invalid resume payload.');
+        if (!file?.data || !file?.filename) throw new Error('Resume file is missing.');
 
-        enqueue({ type: 'status', message: 'Creating analysis report...' });
+        send({ type: 'status', message: 'Initializing report...' });
 
-        const initialReportData = {
+        // ---- ensure a report (create if not provided)
+        let reportRef;
+        if (opts?.reportId) {
+          reportRef = doc(db, 'users', userId, 'analysisReports', opts.reportId);
+          const snap = await getDoc(reportRef);
+          if (!snap.exists()) throw new Error('Report not found for given reportId.');
+        } else {
+          const initial = {
             jobDescription,
             rankedResumes: [],
             statuses: {},
             createdAt: serverTimestamp(),
-            resumes: resumes.map(r => ({ filename: r.filename, url: '' }))
-        };
+            resumes: [] as Array<{ filename: string; url: string }>
+          };
+          reportRef = await addDoc(collection(db, 'users', userId, 'analysisReports'), initial);
+          send({ type: 'reportId', id: reportRef.id });
+        }
 
-        const reportRef = await addDoc(collection(db, 'users', userId, 'analysisReports'), initialReportData);
-        enqueue({ type: 'reportId', id: reportRef.id });
+        // ---- upload ONLY this resume file
+        send({ type: 'status', message: `Uploading ${file.filename}...` });
+        const storageRef = ref(storage, `resumehire/${userId}/${reportRef.id}/${file.filename}`);
+        await uploadBytes(storageRef, file.data);
+        const downloadURL = await getDownloadURL(storageRef);
 
+        // ---- upsert this resume entry into report.resumes
+        const reportSnap1 = await getDoc(reportRef);
+        const current = reportSnap1.data() || {};
+        const existingResumes: Array<{ filename: string; url: string }> = current.resumes ?? [];
+        const withoutThis = existingResumes.filter(r => r.filename !== file.filename);
+        const finalResumes = [...withoutThis, { filename: file.filename, url: downloadURL }];
+        await updateDoc(reportRef, { resumes: finalResumes });
+        send({ type: 'resumes', resumes: finalResumes });
 
-        enqueue({ type: 'status', message: 'Uploading resume files...' });
-        const uploadPromises = files.map(async file => {
-            const storageRef = ref(storage, `resumehire/${userId}/${reportRef.id}/${file.filename}`);
-            await uploadBytes(storageRef, file.data);
-            const downloadURL = await getDownloadURL(storageRef);
-            return { filename: file.filename, url: downloadURL };
+        // ---- analysis (skills + keywords) for THIS resume only
+        send({ type: 'status', message: `Parsing skills for ${resume.filename}...` });
+        const skills = await retry(() =>
+          parseResumeSkillsFlow({ resumeText: resume.content }) // if your flow takes text
+        );
+
+        send({ type: 'status', message: `Matching keywords for ${resume.filename}...` });
+        const keywords = await retry(() =>
+          matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription })
+        );
+
+        // ---- write details/<filename>
+        send({ type: 'status', message: 'Saving analysis details...' });
+        const batch = writeBatch(db);
+        const detailRef = doc(db, 'users', userId, 'analysisReports', reportRef.id, 'details', resume.filename);
+        const detailData = { skills, keywords } satisfies AnalysisDetails[string];
+        batch.set(detailRef, detailData);
+        await batch.commit();
+
+        send({ type: 'detail', filename: resume.filename, detail: detailData });
+
+        // ---- score/rank this single resume (call your existing rank flow with single-element array)
+        send({ type: 'status', message: 'Scoring resume...' });
+        const rankedSingle = await retry(() =>
+          rankResumesFlow({
+            resumes: [resume],
+            jobDescription,
+            weights
+          })
+        );
+        const singleResult = rankedSingle[0]; // score for this resume
+
+        // ---- merge into report.rankedResumes and statuses; keep sorted desc by score
+        const reportSnap2 = await getDoc(reportRef);
+        const rdata = reportSnap2.data() || {};
+        const prevRanked: Array<{ filename: string; score: number; [k: string]: any }> = rdata.rankedResumes ?? [];
+        const filtered = prevRanked.filter(r => r.filename !== resume.filename);
+        const merged = [...filtered, singleResult].sort((a, b) => b.score - a.score);
+
+        // statuses: add default for new resume, keep existing others
+        const prevStatuses: Record<string, CandidateStatus> = rdata.statuses ?? {};
+        const statuses = { ...prevStatuses, [resume.filename]: prevStatuses[resume.filename] ?? 'none' };
+
+        await updateDoc(reportRef, {
+          rankedResumes: merged,
+          statuses
         });
 
-        const uploadedFiles = await Promise.all(uploadPromises);
-        const fileUrlMap = uploadedFiles.reduce((acc, file) => {
-            acc[file.filename] = file.url;
-            return acc;
-        }, {} as Record<string, string>);
+        send({ type: 'rank', filename: resume.filename, score: singleResult.score });
 
-        const finalResumesWithUrls = resumes.map(r => ({
-            filename: r.filename,
-            url: fileUrlMap[r.filename] || ''
-        }));
-
-        await updateDoc(reportRef, { resumes: finalResumesWithUrls });
-        enqueue({ type: 'resumes', resumes: finalResumesWithUrls });
-
-
-        const batchSize = 4;
-        let allDetails: AnalysisDetails = {};
-        
-        for (let i = 0; i < resumes.length; i += batchSize) {
-            const batch = resumes.slice(i, i + batchSize);
-            enqueue({ type: 'status', message: `Analyzing batch ${i / batchSize + 1} of ${Math.ceil(resumes.length / batchSize)}...` });
-
-            const detailPromises = batch.map(async (resume) => {
-                enqueue({ type: 'status', message: `Parsing skills for ${resume.filename}...` });
-                const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content }));
-                
-                enqueue({ type: 'status', message: `Matching keywords for ${resume.filename}...` });
-                const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
-                
-                const [skills, keywords] = await Promise.all([skillsPromise, keywordsPromise]);
-                
-                const detail = { skills, keywords };
-                enqueue({ type: 'detail', filename: resume.filename, detail });
-                
-                return { filename: resume.filename, ...detail };
-            });
-
-            const detailsArray = await Promise.all(detailPromises);
-            
-            const batchDetails = detailsArray.reduce((acc, detail) => {
-                acc[detail.filename] = { skills: detail.skills, keywords: detail.keywords };
-                return acc;
-            }, {} as AnalysisDetails);
-
-            allDetails = { ...allDetails, ...batchDetails };
-        }
-        
-        enqueue({ type: 'status', message: 'Saving analysis details...' });
-        const detailsBatch = writeBatch(db);
-        for (const [filename, detailData] of Object.entries(allDetails)) {
-            const detailRef = doc(db, 'users', userId, 'analysisReports', reportRef.id, 'details', filename);
-            detailsBatch.set(detailRef, detailData);
-        }
-        await detailsBatch.commit();
-        
-        enqueue({ type: 'status', message: 'Ranking candidates...' });
-        
-        const rankResumesInput: RankResumesInput = {
-            resumes: resumes,
-            jobDescription: jobDescription,
-            weights: weights,
-        };
-        const rankedResumes = await retry(() => rankResumesFlow(rankResumesInput));
-        const sortedRankedResumes = [...rankedResumes].sort((a, b) => b.score - a.score);
-        
-        const statuses = sortedRankedResumes.reduce((acc, r) => {
-          acc[r.filename] = 'none';
-          return acc;
-        }, {} as Record<string, CandidateStatus>);
-        
-        await updateDoc(reportRef, { rankedResumes: sortedRankedResumes, statuses });
-        
-        enqueue({ type: 'status', message: 'Finalizing report...' });
-
-        const finalDocSnapshot = await getDoc(reportRef);
-        const finalDocData = finalDocSnapshot.data();
+        // ---- finalize (return a light final snapshot so UI can refresh)
+        const finalSnap = await getDoc(reportRef);
+        const fd = finalSnap.data();
 
         const finalReport: Report = {
-            id: reportRef.id,
-            jobDescription,
-            rankedResumes: sortedRankedResumes,
-            resumes: finalResumesWithUrls,
-            details: allDetails,
-            statuses,
-            createdAt: (finalDocData?.createdAt?.toDate() ?? new Date()).toISOString(),
+          id: reportRef.id,
+          jobDescription: fd?.jobDescription ?? jobDescription,
+          rankedResumes: fd?.rankedResumes ?? merged,
+          resumes: fd?.resumes ?? finalResumes,
+          details: { [resume.filename]: detailData }, // only this call’s detail; UI can fetch others as needed
+          statuses: fd?.statuses ?? statuses,
+          createdAt: (fd?.createdAt?.toDate?.() ?? new Date()).toISOString(),
         };
 
-        enqueue({ type: 'done', report: finalReport });
+        send({ type: 'done', report: finalReport });
         controller.close();
 
       } catch (e: any) {
-        console.error('Error in analyzeResumesAction stream:', e);
-        enqueue({ type: 'error', error: e.message || 'An unexpected error occurred during analysis.' });
-        controller.close();
+        console.error('Error in analyzeSingleResumeAction stream:', e);
+        const msg = e?.message || 'Unexpected error during single-resume analysis.';
+        try { send({ type: 'error', error: msg }); } finally { controller.close(); }
       }
     }
   });
