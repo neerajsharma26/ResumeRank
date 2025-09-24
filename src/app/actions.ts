@@ -218,19 +218,7 @@ export async function analyzeResumesAction(
   return stream;
 }
 
-// async function retry<T>(fn: () => Promise<T>, tries = 3, delayMs = 800): Promise<T> {
-//   let lastErr: any;
-//   for (let i = 0; i < tries; i++) {
-//     try { return await fn(); } catch (e) { lastErr = e; if (i < tries - 1) await new Promise(r => setTimeout(r, delayMs)); }
-//   }
-//   throw lastErr;
-// }
 
-/**
- * Single-resume analysis stream.
- * - If reportId is provided, append into that report.
- * - Else, creates a new report and returns its id in stream.
- */
 export async function analyzeSingleResumeAction(
   jobDescription: string,
   resume: Resume, // must contain filename (+ content if your flows need text)
@@ -751,5 +739,3 @@ export async function deleteAnalysisReport(
     throw new Error('Failed to delete the analysis report.');
   }
 }
-
-    
