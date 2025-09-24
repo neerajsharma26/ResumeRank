@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -19,7 +20,7 @@ import { Label } from '@/components/ui/label';
 import { formatDistanceToNow } from 'date-fns';
 import { Checkbox } from './ui/checkbox';
 import CandidateCard from './candidate-card';
-import { Tabs, TabsList, TabsContent } from './ui/tabs';
+import { Tabs, TabsList, TabsContent, TabsTrigger } from './ui/tabs';
 import { updateAnalysisReportStatus, analyzeSingleResumeAction } from '@/app/actions';
 const pdfjsLibPromise = import('pdfjs-dist');
 let pdfjsLib: typeof PdfJs | null = null;
@@ -754,7 +755,7 @@ const handleAnalyze = async () => {
                     Adjust the importance of each metric.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6 p-6 bg-[rgba(194,194,235,0.1)]">
+                <CardContent className="space-y-6 p-6 bg-[rgba(194,194,2_2,0.1)]">
                    <WeightSliders 
                       weights={weights}
                       onWeightsChange={setWeights}
