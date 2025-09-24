@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -21,7 +22,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Checkbox } from './ui/checkbox';
 import CandidateCard from './candidate-card';
 import { Tabs, TabsList, TabsContent, TabsTrigger } from './ui/tabs';
-import { updateAnalysisReportStatus, analyzeSingleResumeAction } from '@/app/actions';
+import { updateAnalysisReportStatus, analyzeSingleResumeAction,analyzeBatchResumesAction } from '@/app/actions';
 const pdfjsLibPromise = import('pdfjs-dist');
 let pdfjsLib: typeof PdfJs | null = null;
 pdfjsLibPromise.then(lib => {
@@ -55,6 +56,11 @@ const EmptyState = ({isFiltered = false}: {isFiltered?: boolean}) => (
   </Card>
 );
 
+function chunk<T>(arr: T[], size: number): T[][] {
+    return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
+        arr.slice(i * size, i * size + size)
+    );
+}
 
 export default function MainPage({ onBack, existingResult, onAnalysisComplete }: MainPageProps) {
   const [jobDescription, setJobDescription] = React.useState(existingResult?.jobDescription || '');
@@ -461,6 +467,115 @@ const handleAnalyze = async () => {
     setAbortController(null);
   }
 };
+  // const handleReanalyze = async () => {
+  //   if (!user?.uid || !analysisResult?.id) {
+  //     toast({ title: 'Authentication or Report ID missing', variant: 'destructive' });
+  //     return;
+  //   }
+  //   if (resumeFiles.length === 0) {
+  //     toast({ title: 'No New Resumes', description: 'Please upload at least one new resume.', variant: 'destructive' });
+  //     return;
+  //   }
+  
+  //   // Use the report's JD; fallback to current editor JD if you allow override
+  //   const jdText = (analysisResult?.jobDescription ?? jobDescription ?? '').trim();
+  //   if (!jdText) {
+  //     toast({ title: 'No Job Description', description: 'Report is missing job description.', variant: 'destructive' });
+  //     return;
+  //   }
+  
+  //   setIsLoading(true);
+  //   setLoadingStatus('Preparing to re-analyze...');
+  
+  //   try {
+  //     // Precompute metas (must include filename + content for flows)
+  //     const newResumes = await Promise.all(resumeFiles.map(fileToResume));
+  
+  //     // Abort support
+  //     const controller = new AbortController();
+  //     setAbortController(controller);
+  
+  //     // Chunk into batches of 3
+  //     const fileBatches = chunk(resumeFiles, BATCH_SIZE);
+  //     const metaBatches = chunk(newResumes, BATCH_SIZE);
+  
+  //     for (let bi = 0; bi < fileBatches.length; bi++) {
+  //       if (controller.signal.aborted) {
+  //         toast({ title: 'Re-analysis Cancelled' });
+  //         break;
+  //       }
+  
+  //       const filesBatch = fileBatches[bi];
+  //       const metasBatch = metaBatches[bi];
+  
+  //       setLoadingStatus(
+  //         `Re-analyzing batch ${bi + 1}/${fileBatches.length} (${filesBatch.length} resumes)...`
+  //       );
+  
+  //       // Prepare payloads for this batch (<=3)
+  //       const filesPayload = await Promise.all(
+  //         filesBatch.map(async (file) => ({
+  //           filename: file.name,
+  //           data: await file.arrayBuffer(),
+  //         }))
+  //       );
+  
+  //       // Call batch action with existing reportId
+  //       const stream = await analyzeBatchResumesAction(
+  //         jdText,
+  //         metasBatch,
+  //         weights,
+  //         user.uid,
+  //         filesPayload,
+  //         { reportId: analysisResult.id }
+  //       );
+  
+  //       // Stream events → update UI
+  //       await processStream(stream, {
+  //         signal: controller.signal,
+  //         onEvent: (evt: any) => {
+  //           if (evt?.type === 'status') {
+  //             // Optional granular status
+  //             // setLoadingStatus(evt.message);
+  //           }
+  //           if (evt?.type === 'detail') {
+  //             // Optional: upsert detail for evt.filename
+  //             // upsertDetails(evt.filename, evt.detail);
+  //           }
+  //           if (evt?.type === 'rank') {
+  //             // Optional: update score in UI
+  //             // updateScore(evt.filename, evt.score);
+  //           }
+  //           if (evt?.type === 'done') {
+  //             // Refresh report snapshot/cards
+  //             onAnalysisComplete?.(evt.report);
+  //           }
+  //           if (evt?.type === 'error') {
+  //             toast({ title: 'Batch error', description: evt.error, variant: 'destructive' });
+  //           }
+  //         },
+  //       });
+  //     }
+  
+  //     if (!controller.signal.aborted) {
+  //       setLoadingStatus('Re-analysis complete ✔️');
+  //       toast({ title: 'Re-analysis complete' });
+  //     }
+  //   } catch (e: any) {
+  //     console.error(e);
+  //     toast({
+  //       title: 'Re-analysis Failed',
+  //       description: e.message || 'An unexpected error occurred.',
+  //       variant: 'destructive',
+  //     });
+  //   } finally {
+  //     setIsLoading(false);
+  //     setLoadingStatus('');
+  //     setAbortController(null);
+  //     setResumeFiles([]); // clear files like before
+  //   }
+  // };
+  
   const handleReanalyze = async () => {
     if (!user?.uid || !analysisResult?.id) {
       toast({ title: 'Authentication or Report ID missing', variant: 'destructive' });
