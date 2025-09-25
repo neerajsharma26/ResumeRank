@@ -161,7 +161,7 @@ export default function CandidateCard({
                   </div>
                   <div className="space-y-4">
                     <h4 className="font-semibold flex items-center gap-2"><Tag className="w-4 h-4 text-primary"/> Keyword Analysis</h4>
-                    <p><strong>Match Score:</strong> {details.keywords?.score ?? 'N/A'}/100</p>
+                    {/* <p><strong>Match Score:</strong> {details.keywords?.score ?? 'N/A'}/100</p> */}
                     <p><strong>Summary:</strong> {details.keywords?.summary ?? 'Not available.'}</p>
                     <div>
                       <h5 className="font-medium mb-2">Matched Keywords</h5>

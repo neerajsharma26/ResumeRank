@@ -27,7 +27,7 @@ const MatchKeywordsToResumeOutputSchema = z.object({
   missing: z
     .array(z.string())
     .describe('Keywords from the job description that are missing from the resume.'),
-  score: z.number().describe('A relevance score (0-100) indicating how well the resume keywords match the job description.'),
+  // score: z.number().describe('A relevance score (0-100) indicating how well the resume keywords match the job description.'),
   summary: z.string().describe('A brief summary of how well the resume matches the job description keywords.'),
 });
 export type MatchKeywordsToResumeOutput = z.infer<typeof MatchKeywordsToResumeOutputSchema>;
@@ -47,8 +47,7 @@ const prompt = ai.definePrompt({
 Provide the following in the specified JSON format:
 - matches: A list of keywords from the job description that are present in the resume.
 - missing: A list of keywords from the job description that are NOT found in the resume.
-- score: A relevance score (0-100) based on the proportion of matched keywords.
-- summary: A brief summary explaining the keyword match score.
+- summary: A brief summary explaining the keyword.
 
 Resume:
 {{{resumeText}}}
