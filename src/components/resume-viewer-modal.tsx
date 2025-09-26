@@ -154,19 +154,24 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
   const modalRef = useRef<HTMLDivElement>(null);
   const [fileUrl, setFileUrl] = useState('');
   
-  const isPdf = file?.type === 'application/pdf' || (resumeUrl && new URL(resumeUrl).pathname.endsWith('.pdf'));
+  const isPdf = file?.type === 'application/pdf' || (resumeUrl && resumeUrl.toLowerCase().endsWith('.pdf'));
 
   useEffect(() => {
+    let objectUrl: string | null = null;
     if (file) {
-      const url = URL.createObjectURL(file);
-      setFileUrl(url);
-      return () => URL.revokeObjectURL(url);
+      objectUrl = URL.createObjectURL(file);
+      setFileUrl(objectUrl);
     } else if (resumeUrl) {
       setFileUrl(resumeUrl);
+    } else {
+      setFileUrl('');
     }
-     else {
-        setFileUrl('');
-    }
+    
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
   }, [file, resumeUrl]);
 
   useEffect(() => {
@@ -211,7 +216,7 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
       </header>
 
       <main className="flex-grow bg-slate-200 flex items-center justify-center overflow-hidden">
-        {isPdf ? (
+        {isPdf && fileUrl ? (
             <PdfPreview fileUrl={fileUrl} onDownload={handleDownload} />
         ) : resumeContent ? (
             <TextView
@@ -223,8 +228,17 @@ export const ResumeViewerModal: React.FC<ResumeViewerModalProps> = ({
                 hasFile={canDownload}
             />
         ) : (
-          <div className="flex items-center justify-center h-full text-slate-600">
-            <p>No resume content available to display.</p>
+          <div className="flex items-center justify-center h-full text-slate-600 p-8 text-center">
+             <div>
+                <h3 className="text-xl font-semibold mb-2">No Preview Available</h3>
+                <p>The content for this file type cannot be displayed directly.</p>
+                {canDownload && (
+                     <button onClick={handleDownload} className="mt-6 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+                        <DownloadIcon />
+                        <span>Download Original File</span>
+                    </button>
+                )}
+            </div>
           </div>
         )}
       </main>

@@ -414,6 +414,7 @@ const handleAnalyze = async () => {
 
   const currentRankedResult = analysisResult?.rankedResumes[viewingIndex];
   const currentResume = analysisResult?.resumes.find(r => r.filename === currentRankedResult?.filename);
+  const currentDetail = currentRankedResult ? analysisResult?.details[currentRankedResult.filename] : undefined;
   const currentFile = isViewingPastReport ? null : (currentRankedResult ? resumeFiles.find(f => f.name === currentRankedResult.filename) || null : null);
 
   const formatFileSize = (bytes: number) => {
@@ -880,14 +881,14 @@ const SIZE=100;
         />
       )}
       
-      {analysisResult && isViewerOpen && currentRankedResult && (
+      {analysisResult && isViewerOpen && currentRankedResult && currentDetail && (
          <ResumeViewerModal
             isOpen={isViewerOpen}
             onClose={() => setIsViewerOpen(false)}
             result={currentRankedResult}
-            details={analysisResult.details[currentRankedResult.filename]}
+            details={currentDetail}
             file={currentFile}
-            resumeContent={currentResume?.content}
+            resumeContent={analysisResult?.resumes?.find(r => r.filename === currentRankedResult.filename)?.content}
             resumeUrl={currentResume?.url}
             onNext={() => setViewingIndex(i => (i + 1) % analysisResult.rankedResumes.length)}
             onPrev={() => setViewingIndex(i => (i - 1 + analysisResult.rankedResumes.length) % analysisResult.rankedResumes.length)}
