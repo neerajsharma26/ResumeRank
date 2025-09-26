@@ -114,11 +114,11 @@ export async function analyzeBatchResumesAction(
           const storageRef = ref(storage, `resumehire/${userId}/${reportRef.id}/${file.filename}`);
           await uploadBytes(storageRef, file.data);
           const downloadURL = await getDownloadURL(storageRef);
-          return { filename: file.filename, url: downloadURL };
+          return { filename: file.filename, url: downloadURL, content: resumes.find(r => r.filename === file.filename)?.content || '' };
         });
         const uploadedResumes = await Promise.all(uploadPromises);
 
-        await updateDoc(reportRef, { resumes: arrayUnion(...uploadedResumes) });
+        await updateDoc(reportRef, { resumes: arrayUnion(...uploadedResumes.map(({content, ...rest}) => rest)) });
         send({ type: 'resumes', resumes: uploadedResumes });
 
         send({ type: 'status', message: `Analyzing ${resumes.length} resume(s)...` });
@@ -187,7 +187,7 @@ export async function analyzeBatchResumesAction(
             id: reportRef.id,
             jobDescription,
             rankedResumes: finalDocData?.rankedResumes || [],
-            resumes: finalDocData?.resumes || [],
+            resumes: finalDocData?.resumes.map((r:any) => ({...r, content: resumes.find(res => res.filename === r.filename)?.content || ''})) || [],
             details: allDetails,
             statuses: finalDocData?.statuses || {},
             createdAt: (finalDocData?.createdAt?.toDate() ?? new Date()).toISOString(),
@@ -318,7 +318,7 @@ export async function analyzeSingleResumeAction(
           id: reportRef.id,
           jobDescription: fd?.jobDescription ?? jobDescription,
           rankedResumes: fd?.rankedResumes ?? merged,
-          resumes: fd?.resumes ?? finalResumes,
+          resumes: (fd?.resumes ?? finalResumes).map((r:any) => ({...r, content: resume.filename === r.filename ? resume.content : ''})),
           details: { [resume.filename]: detailData }, // only this call’s detail; UI can fetch others as needed
           statuses: fd?.statuses ?? statuses,
           createdAt: (fd?.createdAt?.toDate?.() ?? new Date()).toISOString(),
@@ -363,7 +363,7 @@ export async function updateAndReanalyzeReport(
         const jobDescription = reportData.jobDescription;
         
         // --- Single Source of Truth for Resumes ---
-        const allResumesMap = new Map<string, { filename: string, url: string, content?: string }>();
+        const allResumesMap = new Map<string, { filename: string, url?: string, content?: string }>();
         // Load existing resumes
         if (reportData.resumes) {
           for (const resume of reportData.resumes) {
@@ -416,12 +416,17 @@ export async function updateAndReanalyzeReport(
 
         enqueue({ type: 'status', message: 'Ranking all candidates...' });
         const rankResumesInput: RankResumesInput = {
-            resumes: allResumesForRanking,
+            resumes: allResumesForRanking.filter(r => r.content),
             jobDescription: jobDescription,
             weights: weights,
         };
         const rankedResumes = await retry(() => rankResumesFlow(rankResumesInput));
-        const sortedRankedResumes = [...rankedResumes].sort((a, b) => b.score - a.score);
+        
+        const existingRanked = reportData.rankedResumes || [];
+        const rankedMap = new Map(existingRanked.map((r: any) => [r.filename, r]));
+        rankedResumes.forEach(r => rankedMap.set(r.filename, r));
+        
+        const sortedRankedResumes = Array.from(rankedMap.values()).sort((a, b) => b.score - a.score);
         
         const allResumesForDb = Array.from(allResumesMap.values()).map(({ content, ...rest }) => rest); // Remove content before DB write
         
@@ -446,7 +451,7 @@ export async function updateAndReanalyzeReport(
             id: reportRef.id,
             jobDescription,
             rankedResumes: finalDocData?.rankedResumes || [],
-            resumes: finalDocData?.resumes || [],
+            resumes: finalDocData?.resumes.map((r:any) => ({...r, content: allResumesMap.get(r.filename)?.content || ''})) || [],
             details: allDetails,
             statuses: finalDocData?.statuses || {},
             createdAt: (finalDocData?.createdAt?.toDate() ?? new Date()).toISOString(),

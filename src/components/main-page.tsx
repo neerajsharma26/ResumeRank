@@ -20,7 +20,7 @@ import { Label } from '@/components/ui/label';
 import { formatDistanceToNow } from 'date-fns';
 import { Checkbox } from './ui/checkbox';
 import CandidateCard from './candidate-card';
-import { Tabs, TabsList, TabsContent, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import { updateAnalysisReportStatus, analyzeSingleResumeAction } from '@/app/actions';
 
 const DEFAULT_WEIGHTS: MetricWeights = {
@@ -415,7 +415,6 @@ const handleAnalyze = async () => {
   const currentRankedResult = analysisResult?.rankedResumes[viewingIndex];
   const currentResume = analysisResult?.resumes.find(r => r.filename === currentRankedResult?.filename);
   const currentDetail = currentRankedResult ? analysisResult?.details[currentRankedResult.filename] : undefined;
-  const currentFile = isViewingPastReport ? null : (currentRankedResult ? resumeFiles.find(f => f.name === currentRankedResult.filename) || null : null);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -887,8 +886,7 @@ const SIZE=100;
             onClose={() => setIsViewerOpen(false)}
             result={currentRankedResult}
             details={currentDetail}
-            file={currentFile}
-            resumeContent={analysisResult?.resumes?.find(r => r.filename === currentRankedResult.filename)?.content}
+            resumeContent={analysisResult.resumes.find(r => r.filename === currentRankedResult.filename)?.content}
             resumeUrl={currentResume?.url}
             onNext={() => setViewingIndex(i => (i + 1) % analysisResult.rankedResumes.length)}
             onPrev={() => setViewingIndex(i => (i - 1 + analysisResult.rankedResumes.length) % analysisResult.rankedResumes.length)}
