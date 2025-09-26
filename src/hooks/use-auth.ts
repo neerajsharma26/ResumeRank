@@ -2,7 +2,6 @@
 
 import {useState, useEffect, useCallback} from 'react';
 import {
-  getAuth,
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithRedirect,
@@ -10,7 +9,7 @@ import {
   signOut,
   User,
 } from 'firebase/auth';
-import {app} from '@/lib/firebase';
+import {auth} from '@/lib/firebase';
 
 export interface AuthContextType {
   user: User | null;
@@ -18,8 +17,6 @@ export interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
 }
-
-const auth = getAuth(app);
 
 export function useAuth(): AuthContextType {
   const [user, setUser] = useState<User | null>(null);
