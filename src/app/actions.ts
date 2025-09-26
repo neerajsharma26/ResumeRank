@@ -72,6 +72,138 @@ async function retry<T>(fn: () => Promise<T>): Promise<T> {
   throw lastError;
 }
 
+export async function analyzeBatchResumesAction(
+  jobDescription: string,
+  resumes: Resume[], // must contain filename + content
+  weights: MetricWeights,
+  userId: string,
+  files: { filename: string; data: ArrayBuffer }[],
+  opts?: { reportId?: string } // optional existing report
+): Promise<ReadableStream<any>> {
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      const send = (obj: object) => controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n'));
+
+      try {
+        if (!userId) throw new Error('Unauthenticated');
+        if (!jobDescription?.trim()) throw new Error('Job description cannot be empty.');
+        if (resumes.length === 0) throw new Error('No resumes to analyze.');
+
+        send({ type: 'status', message: 'Initializing report...' });
+        
+        let reportRef;
+        if (opts?.reportId) {
+          reportRef = doc(db, 'users', userId, 'analysisReports', opts.reportId);
+          const snap = await getDoc(reportRef);
+          if (!snap.exists()) throw new Error('Report not found for given reportId.');
+        } else {
+          const initial = {
+            jobDescription,
+            rankedResumes: [],
+            statuses: {},
+            createdAt: serverTimestamp(),
+            resumes: []
+          };
+          reportRef = await addDoc(collection(db, 'users', userId, 'analysisReports'), initial);
+          send({ type: 'reportId', id: reportRef.id });
+        }
+        
+        send({ type: 'status', message: 'Uploading resume files...' });
+        const uploadPromises = files.map(async file => {
+          const storageRef = ref(storage, `resumehire/${userId}/${reportRef.id}/${file.filename}`);
+          await uploadBytes(storageRef, file.data);
+          const downloadURL = await getDownloadURL(storageRef);
+          return { filename: file.filename, url: downloadURL };
+        });
+        const uploadedResumes = await Promise.all(uploadPromises);
+
+        await updateDoc(reportRef, { resumes: arrayUnion(...uploadedResumes) });
+        send({ type: 'resumes', resumes: uploadedResumes });
+
+        send({ type: 'status', message: `Analyzing ${resumes.length} resume(s)...` });
+        
+        const analysisPromises = resumes.map(async (resume) => {
+            send({ type: 'status', message: `Analyzing: ${resume.filename}...` });
+            const skillsPromise = retry(() => parseResumeSkillsFlow({ resumeText: resume.content }));
+            const keywordsPromise = retry(() => matchKeywordsToResumeFlow({ resumeText: resume.content, jobDescription }));
+            const [skills, keywords] = await Promise.all([skillsPromise, keywordsPromise]);
+            return { filename: resume.filename, skills, keywords };
+        });
+        
+        const detailsArray = await Promise.all(analysisPromises);
+        
+        const batch = writeBatch(db);
+        const allDetails: AnalysisDetails = {};
+        for (const detail of detailsArray) {
+            allDetails[detail.filename] = { skills: detail.skills, keywords: detail.keywords };
+            const detailRef = doc(db, 'users', userId, 'analysisReports', reportRef.id, 'details', detail.filename);
+            batch.set(detailRef, { skills: detail.skills, keywords: detail.keywords });
+        }
+        await batch.commit();
+
+        for (const detail of detailsArray) {
+            send({ type: 'detail', filename: detail.filename, detail: allDetails[detail.filename] });
+        }
+
+        send({ type: 'status', message: 'Ranking all candidates...' });
+        const rankResumesInput: RankResumesInput = {
+            resumes: resumes,
+            jobDescription: jobDescription,
+            weights: weights,
+        };
+        const rankedResumes = await retry(() => rankResumesFlow(rankResumesInput));
+
+        const reportSnap = await getDoc(reportRef);
+        const reportData = reportSnap.data();
+        
+        const prevRanked = reportData?.rankedResumes || [];
+        const prevStatuses = reportData?.statuses || {};
+        
+        const rankedMap = new Map(prevRanked.map((r: any) => [r.filename, r]));
+        rankedResumes.forEach(r => rankedMap.set(r.filename, r));
+        
+        const finalRanked = Array.from(rankedMap.values()).sort((a, b) => b.score - a.score);
+        
+        const finalStatuses = { ...prevStatuses };
+        finalRanked.forEach((r: any) => {
+            if (!finalStatuses[r.filename]) {
+                finalStatuses[r.filename] = 'none';
+            }
+        });
+
+        await updateDoc(reportRef, { 
+            rankedResumes: finalRanked,
+            statuses: finalStatuses
+        });
+        
+        send({ type: 'status', message: 'Finalizing report...' });
+
+        const finalDocSnapshot = await getDoc(reportRef);
+        const finalDocData = finalDocSnapshot.data();
+        const finalResumesList = (await getDocs(collection(reportRef, 'resumes'))).docs.map(d => d.data());
+
+        const finalReport: Report = {
+            id: reportRef.id,
+            jobDescription,
+            rankedResumes: finalDocData?.rankedResumes || [],
+            resumes: finalDocData?.resumes || [],
+            details: allDetails,
+            statuses: finalDocData?.statuses || {},
+            createdAt: (finalDocData?.createdAt?.toDate() ?? new Date()).toISOString(),
+        };
+
+        send({ type: 'done', report: finalReport });
+        controller.close();
+      } catch (e: any) {
+        console.error('Error in analyzeBatchResumesAction stream:', e);
+        send({ type: 'error', error: e.message || 'An unexpected error occurred.' });
+        controller.close();
+      }
+    },
+  });
+  return stream;
+}
 
 export async function analyzeSingleResumeAction(
   jobDescription: string,
