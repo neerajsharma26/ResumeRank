@@ -3,11 +3,10 @@
 'use client';
 
 import * as React from 'react';
-import { analyzeResumesAction, Report, updateAndReanalyzeReport } from '@/app/actions';
+import { analyzeBatchResumesAction, Report, updateAndReanalyzeReport } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { AnalysisResult, Resume, MetricWeights, CandidateStatus, AnalysisDetails } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import type * as PdfJs from 'pdfjs-dist';
 
 import Header from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
@@ -23,22 +22,15 @@ import { Checkbox } from './ui/checkbox';
 import CandidateCard from './candidate-card';
 import { Tabs, TabsList, TabsContent, TabsTrigger } from './ui/tabs';
 import { updateAnalysisReportStatus, analyzeSingleResumeAction } from '@/app/actions';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GoogleAIFileManager } from '@google/generative-ai/server';
-const pdfjsLibPromise = import('pdfjs-dist');
-let pdfjsLib: typeof PdfJs | null = null;
-pdfjsLibPromise.then(lib => {
-  pdfjsLib = lib;
-  if (pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
-  }
-});
 
 const DEFAULT_WEIGHTS: MetricWeights = {
-  skills: 8,
-  experience: 10,
-  education: 5,
+  skills: 35,
+  experience: 35,
+  education: 30,
 };
+
+const BATCH_SIZE = 3; // Process 3 resumes at a time
+const RESUMES_PER_PAGE = 10;
 
 interface MainPageProps {
   onBack: () => void;
@@ -93,6 +85,7 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   const [selectedForCompare, setSelectedForCompare] = React.useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = React.useState<"all" | "shortlisted" | "rejected">('all');
   const [candidateStatuses, setCandidateStatuses] = React.useState<Record<string, CandidateStatus>>({});
+  const [currentPage, setCurrentPage] = React.useState(1);
 
   const isViewingPastReport = !!existingResult;
   const analysisResult = existingResult;
@@ -103,6 +96,10 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
         setCandidateStatuses(analysisResult.statuses || {});
     }
   }, [analysisResult]);
+
+   React.useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
   
   const handleStatusChange = async (filename: string, status: CandidateStatus) => {
       const newStatuses = { ...candidateStatuses, [filename]: status };
@@ -120,37 +117,18 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   }
   
   const fileToText = async (file: File): Promise<string> => {
-    if (!pdfjsLib) {
-      pdfjsLib = await pdfjsLibPromise;
-      if (pdfjsLib) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs`;
-      }
-    }
-      
-    if (file.type === 'application/pdf') {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-      let textContent = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const text = await page.getTextContent();
-        textContent += text.items.map(s => (s as any).str).join(' ');
-      }
-      return textContent;
-    } else {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          if (event.target && typeof event.target.result === 'string') {
-            resolve(event.target.result);
-          } else {
-            reject(new Error("Couldn't read file"));
-          }
-        };
-        reader.onerror = () => reject(new Error("Error reading file"));
-        reader.readAsText(file);
-      });
-    }
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target && typeof event.target.result === 'string') {
+          resolve(event.target.result);
+        } else {
+          reject(new Error("Couldn't read file"));
+        }
+      };
+      reader.onerror = () => reject(new Error("Error reading file"));
+      reader.readAsText(file);
+    });
   };
 
 
@@ -161,6 +139,10 @@ export default function MainPage({ onBack, existingResult, onAnalysisComplete }:
   };
 
   const processStream = async (stream: ReadableStream, options?: { signal?: AbortSignal, onEvent?: (event: any) => void }) => {
+    if (!stream) {
+      console.error("processStream received an undefined stream.");
+      throw new Error("Analysis action failed to return a stream.");
+    }
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -237,63 +219,65 @@ const handleAnalyze = async () => {
     const controller = new AbortController();
     setAbortController(controller);
 
-    // We will reuse the same report; first call will create it and return reportId
+    const fileBatches = chunk(resumeFiles, BATCH_SIZE);
+    const metaBatches = chunk(resumeMetas, BATCH_SIZE);
+
     let reportId: string | undefined;
 
-    // Process ONE resume at a time
-    for (let i = 0; i < resumeFiles.length; i++) {
-      if (controller.signal.aborted) {
-          toast({ title: 'Analysis Cancelled' });
-          break;
-      }
-      const file = resumeFiles[i];
-      const meta = resumeMetas[i];
-
-      setLoadingStatus(`Analyzing ${i + 1}/${resumeFiles.length}: ${file.name}`);
-
-      // Prepare only this file for upload
-      const singleFilePayload = {
-        filename: file.name,
-        data: await file.arrayBuffer(),
-      };
-
-      try {
-        // Call single-resume action (append to existing report if we have reportId)
-        const stream = await analyzeSingleResumeAction(
-          currentJobDescription,
-          meta,
-          weights,
-          user.uid,
-          singleFilePayload,
-          reportId ? { reportId } : undefined
-        );
-
-        // Read server events; capture reportId from the first call
-        await processStream(stream, {
-          signal: controller.signal,
-          onEvent: (evt: any) => {
-            if (evt?.type === 'reportId' && !reportId) {
-              reportId = evt.id; // subsequent resumes append to same report
-            }
-            if (evt?.type === 'done') {
-                onAnalysisComplete(evt.report);
-            }
-          },
-        });
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
-            console.log('Analysis of a file was aborted.');
+    for (let i = 0; i < fileBatches.length; i++) {
+        if (controller.signal.aborted) {
+            toast({ title: 'Analysis Cancelled' });
             break;
         }
-        console.error('Failed:', file.name, err);
-        toast({
-          title: `Failed: ${file.name}`,
-          description: err?.message ?? 'Unexpected error',
-          variant: 'destructive',
-        });
-        // continue with next resume
-      }
+        
+        const fileBatch = fileBatches[i];
+        const metaBatch = metaBatches[i];
+
+        setLoadingStatus(`Analyzing batch ${i + 1}/${fileBatches.length}...`);
+
+        const filesForUpload = await Promise.all(
+          fileBatch.map(async (file) => ({
+            filename: file.name,
+            data: await file.arrayBuffer(),
+          }))
+        );
+
+        try {
+            const stream = await analyzeBatchResumesAction(
+                currentJobDescription,
+                metaBatch,
+                weights,
+                user.uid,
+                filesForUpload,
+                reportId ? { reportId } : undefined
+            );
+
+            await processStream(stream, {
+              signal: controller.signal,
+              onEvent: (evt: any) => {
+                if (evt?.type === 'reportId' && !reportId) {
+                  reportId = evt.id;
+                }
+                if (evt?.type === 'done') {
+                    onAnalysisComplete(evt.report);
+                }
+              },
+            });
+        } catch (err: any) {
+            if (err.name === 'AbortError') {
+                console.log('Analysis of a batch was aborted.');
+                break;
+            }
+            console.error(`Failed processing batch ${i + 1}:`, err);
+            toast({
+              title: `Failed processing batch ${i + 1}`,
+              description: err?.message ?? 'Unexpected error',
+              variant: 'destructive',
+            });
+            // Decide if you want to stop or continue with next batch
+        }
     }
+
 
     if (!controller.signal.aborted) {
         setLoadingStatus('All done ✔️');
@@ -314,261 +298,7 @@ const handleAnalyze = async () => {
   }
 };
 
-  // const handleReanalyze = async () => {
-  //   if (!user?.uid || !analysisResult?.id) {
-  //     toast({ title: 'Authentication or Report ID missing', variant: 'destructive' });
-  //     return;
-  //   }
-  //   if (resumeFiles.length === 0) {
-  //     toast({ title: 'No New Resumes', description: 'Please upload at least one new resume.', variant: 'destructive' });
-  //     return;
-  //   }
-    
-  //   setIsLoading(true);
-  //   setLoadingStatus('Preparing to re-analyze...');
-  //   try {
-  //     const newResumes = await Promise.all(resumeFiles.map(fileToResume));
-  //     const newFilesForUpload = await Promise.all(
-  //       resumeFiles.map(async (file) => ({
-  //         filename: file.name,
-  //         data: await file.arrayBuffer(),
-  //       }))
-  //     );
 
-  //     const stream = await updateAndReanalyzeReport(user.uid, analysisResult.id, newResumes, newFilesForUpload, weights);
-  //     await processStream(stream);
-
-  //   } catch (e: any) {
-  //     console.error(e);
-  //     toast({
-  //       title: 'Re-analysis Failed',
-  //       description: e.message || 'An unexpected error occurred.',
-  //       variant: 'destructive',
-  //     });
-  //   } finally {
-  //     setIsLoading(false);
-  //     setLoadingStatus('');
-  //     setResumeFiles([]); // Clear files after attempt
-  //   }
-  // };
-  
-  // const handleReanalyze = async () => {
-  //   if (!user?.uid || !analysisResult?.id) {
-  //     toast({ title: 'Authentication or Report ID missing', variant: 'destructive' });
-  //     return;
-  //   }
-  //   if (resumeFiles.length === 0) {
-  //     toast({ title: 'No New Resumes', description: 'Please upload at least one new resume.', variant: 'destructive' });
-  //     return;
-  //   }
-  
-  //   // Use the report's JD; fallback to current editor JD if you allow override
-  //   const jdText = (analysisResult?.jobDescription ?? jobDescription ?? '').trim();
-  //   if (!jdText) {
-  //     toast({ title: 'No Job Description', description: 'Report is missing job description.', variant: 'destructive' });
-  //     return;
-  //   }
-  
-  //   setIsLoading(true);
-  //   setLoadingStatus('Preparing to re-analyze...');
-  
-  //   try {
-  //     // Precompute metas (must include filename + content for flows)
-  //     const newResumes = await Promise.all(resumeFiles.map(fileToResume));
-  
-  //     // Abort support
-  //     const controller = new AbortController();
-  //     setAbortController(controller);
-  
-  //     // Chunk into batches of 3
-  //     const fileBatches = chunk(resumeFiles, BATCH_SIZE);
-  //     const metaBatches = chunk(newResumes, BATCH_SIZE);
-  
-  //     for (let bi = 0; bi < fileBatches.length; bi++) {
-  //       if (controller.signal.aborted) {
-  //         toast({ title: 'Re-analysis Cancelled' });
-  //         break;
-  //       }
-  
-  //       const filesBatch = fileBatches[bi];
-  //       const metasBatch = metaBatches[bi];
-  
-  //       setLoadingStatus(
-  //         `Re-analyzing batch ${bi + 1}/${fileBatches.length} (${filesBatch.length} resumes)...`
-  //       );
-  
-  //       // Prepare payloads for this batch (<=3)
-  //       const filesPayload = await Promise.all(
-  //         filesBatch.map(async (file) => ({
-  //           filename: file.name,
-  //           data: await file.arrayBuffer(),
-  //         }))
-  //       );
-  
-  //       // Call batch action with existing reportId
-  //       const stream = await analyzeBatchResumesAction(
-  //         jdText,
-  //         metasBatch,
-  //         weights,
-  //         user.uid,
-  //         filesPayload,
-  //         { reportId: analysisResult.id }
-  //       );
-  
-  //       // Stream events → update UI
-  //       await processStream(stream, {
-  //         signal: controller.signal,
-  //         onEvent: (evt: any) => {
-  //           if (evt?.type === 'status') {
-  //             // Optional granular status
-  //             // setLoadingStatus(evt.message);
-  //           }
-  //           if (evt?.type === 'detail') {
-  //             // Optional: upsert detail for evt.filename
-  //             // upsertDetails(evt.filename, evt.detail);
-  //           }
-  //           if (evt?.type === 'rank') {
-  //             // Optional: update score in UI
-  //             // updateScore(evt.filename, evt.score);
-  //           }
-  //           if (evt?.type === 'done') {
-  //             // Refresh report snapshot/cards
-  //             onAnalysisComplete?.(evt.report);
-  //           }
-  //           if (evt?.type === 'error') {
-  //             toast({ title: 'Batch error', description: evt.error, variant: 'destructive' });
-  //           }
-  //         },
-  //       });
-  //     }
-  
-  //     if (!controller.signal.aborted) {
-  //       setLoadingStatus('Re-analysis complete ✔️');
-  //       toast({ title: 'Re-analysis complete' });
-  //     }
-  //   } catch (e: any) {
-  //     console.error(e);
-  //     toast({
-  //       title: 'Re-analysis Failed',
-  //       description: e.message || 'An unexpected error occurred.',
-  //       variant: 'destructive',
-  //     });
-  //   } finally {
-  //     setIsLoading(false);
-  //     setLoadingStatus('');
-  //     setAbortController(null);
-  //     setResumeFiles([]); // clear files like before
-  //   }
-  // };
-  
-  // const handleReanalyze = async () => {
-  //   if (!user?.uid || !analysisResult?.id) {
-  //     toast({ title: 'Authentication or Report ID missing', variant: 'destructive' });
-  //     return;
-  //   }
-  //   if (resumeFiles.length === 0) {
-  //     toast({ title: 'No New Resumes', description: 'Please upload at least one new resume.', variant: 'destructive' });
-  //     return;
-  //   }
-  
-  //   // Use the report's JD; fallback to current editor JD if you allow override
-  //   const jdText = (analysisResult?.jobDescription ?? jobDescription ?? '').trim();
-  //   if (!jdText) {
-  //     toast({ title: 'No Job Description', description: 'Report is missing job description.', variant: 'destructive' });
-  //     return;
-  //   }
-  
-  //   setIsLoading(true);
-  //   setLoadingStatus('Preparing to re-analyze...');
-  
-  //   try {
-  //     // Precompute metas (must include filename + content for flows)
-  //     const newResumes = await Promise.all(resumeFiles.map(fileToResume));
-  
-  //     // Abort support
-  //     const controller = new AbortController();
-  //     setAbortController(controller);
-  
-  //     // Chunk into batches of 3
-  //     const fileBatches = chunk(resumeFiles, BATCH_SIZE);
-  //     const metaBatches = chunk(newResumes, BATCH_SIZE);
-  
-  //     for (let bi = 0; bi < fileBatches.length; bi++) {
-  //       if (controller.signal.aborted) {
-  //         toast({ title: 'Re-analysis Cancelled' });
-  //         break;
-  //       }
-  
-  //       const filesBatch = fileBatches[bi];
-  //       const metasBatch = metaBatches[bi];
-  
-  //       setLoadingStatus(
-  //         `Re-analyzing batch ${bi + 1}/${fileBatches.length} (${filesBatch.length} resumes)...`
-  //       );
-  
-  //       // Prepare payloads for this batch (<=3)
-  //       const filesPayload = await Promise.all(
-  //         filesBatch.map(async (file) => ({
-  //           filename: file.name,
-  //           data: await file.arrayBuffer(),
-  //         }))
-  //       );
-  
-  //       // Call batch action with existing reportId
-  //       const stream = await analyzeBatchResumesAction(
-  //         jdText,
-  //         metasBatch,
-  //         weights,
-  //         user.uid,
-  //         filesPayload,
-  //         { reportId: analysisResult.id }
-  //       );
-  
-  //       // Stream events → update UI
-  //       await processStream(stream, {
-  //         signal: controller.signal,
-  //         onEvent: (evt: any) => {
-  //           if (evt?.type === 'status') {
-  //             // Optional granular status
-  //             // setLoadingStatus(evt.message);
-  //           }
-  //           if (evt?.type === 'detail') {
-  //             // Optional: upsert detail for evt.filename
-  //             // upsertDetails(evt.filename, evt.detail);
-  //           }
-  //           if (evt?.type === 'rank') {
-  //             // Optional: update score in UI
-  //             // updateScore(evt.filename, evt.score);
-  //           }
-  //           if (evt?.type === 'done') {
-  //             // Refresh report snapshot/cards
-  //             onAnalysisComplete?.(evt.report);
-  //           }
-  //           if (evt?.type === 'error') {
-  //             toast({ title: 'Batch error', description: evt.error, variant: 'destructive' });
-  //           }
-  //         },
-  //       });
-  //     }
-  
-  //     if (!controller.signal.aborted) {
-  //       setLoadingStatus('Re-analysis complete ✔️');
-  //       toast({ title: 'Re-analysis complete' });
-  //     }
-  //   } catch (e: any) {
-  //     console.error(e);
-  //     toast({
-  //       title: 'Re-analysis Failed',
-  //       description: e.message || 'An unexpected error occurred.',
-  //       variant: 'destructive',
-  //     });
-  //   } finally {
-  //     setIsLoading(false);
-  //     setLoadingStatus('');
-  //     setAbortController(null);
-  //     setResumeFiles([]); // clear files like before
-  //   }
-  // };
   const handleReanalyze = async () => {
     if (!user?.uid || !analysisResult?.id) {
       toast({ title: 'Authentication or Report ID missing', variant: 'destructive' });
@@ -591,76 +321,59 @@ const handleAnalyze = async () => {
   
     try {
       // Precompute metas (must include filename + content for flows)
-      const metas = await Promise.all(resumeFiles.map(fileToResume));
+      const newResumes = await Promise.all(resumeFiles.map(fileToResume));
   
       // Abort support
       const controller = new AbortController();
       setAbortController(controller);
   
-      // ONE-BY-ONE (no batching)
-      for (let i = 0; i < resumeFiles.length; i++) {
+      // Chunk into batches of 3
+      const fileBatches = chunk(resumeFiles, BATCH_SIZE);
+      const metaBatches = chunk(newResumes, BATCH_SIZE);
+  
+      for (let bi = 0; bi < fileBatches.length; bi++) {
         if (controller.signal.aborted) {
           toast({ title: 'Re-analysis Cancelled' });
           break;
         }
+        setLoadingStatus(`Analyzing batch ${bi + 1}/${fileBatches.length}...`);
   
-        const file = resumeFiles[i];
-        const meta = metas[i];
+        const fileBatch = fileBatches[bi];
+        const metaBatch = metaBatches[bi];
   
-        setLoadingStatus(`Re-analyzing ${i + 1}/${resumeFiles.length}: ${file.name}`);
-  
-        const payload = {
-          filename: file.name,
-          data: await file.arrayBuffer(),
-        };
+        const filesForUpload = await Promise.all(
+          fileBatch.map(async (f) => ({
+            filename: f.name,
+            data: await f.arrayBuffer(),
+          }))
+        );
   
         try {
-          const stream = await analyzeSingleResumeAction(
-            jdText,
-            meta,
-            weights,
+          const stream = await updateAndReanalyzeReport(
             user.uid,
-            payload,
-            { reportId: analysisResult.id } // append into existing report
+            analysisResult.id,
+            metaBatch,
+            filesForUpload,
+            weights
           );
   
           await processStream(stream, {
             signal: controller.signal,
-            onEvent: (evt: any) => {
-              if (evt?.type === 'status') {
-                // optionally reflect granular status
-                // setLoadingStatus(`${file.name}: ${evt.message}`);
-              }
-              if (evt?.type === 'detail') {
-                // optionally merge details in UI for evt.filename
-                // upsertDetails(evt.filename, evt.detail);
-              }
-              if (evt?.type === 'rank') {
-                // optionally update score UI
-                // updateScore(evt.filename, evt.score);
-              }
+            onEvent: (evt) => {
               if (evt?.type === 'done') {
-                // refresh report snapshot/cards incrementally
                 onAnalysisComplete?.(evt.report);
-              }
-              if (evt?.type === 'error') {
-                toast({ title: `Error: ${file.name}`, description: evt.error, variant: 'destructive' });
               }
             },
           });
-  
         } catch (err: any) {
-          if (err?.name === 'AbortError') {
-            console.log('Re-analysis aborted by user.');
+          if (err.name === 'AbortError') {
             break;
           }
-          console.error('Failed:', file.name, err);
           toast({
-            title: `Failed: ${file.name}`,
-            description: err?.message ?? 'Unexpected error',
+            title: `Error in batch ${bi + 1}`,
+            description: err.message,
             variant: 'destructive',
           });
-          // continue with next file
         }
       }
   
@@ -680,6 +393,7 @@ const handleAnalyze = async () => {
       setLoadingStatus('');
       setAbortController(null);
       setResumeFiles([]); // clear files like before
+      setShowReanalyzeUI(false);
     }
   };
   const handleComparison = (filenames: string[]) => {
@@ -763,6 +477,12 @@ const SIZE=100;
     if (activeTab === 'all') return analysisResult.rankedResumes;
     return analysisResult.rankedResumes.filter(r => candidateStatuses[r.filename] === activeTab);
   }, [analysisResult, activeTab, candidateStatuses]);
+
+  const totalPages = Math.ceil(filteredResumes.length / RESUMES_PER_PAGE);
+  const paginatedResumes = filteredResumes.slice(
+    (currentPage - 1) * RESUMES_PER_PAGE,
+    currentPage * RESUMES_PER_PAGE
+  );
 
   const handleCompareSelect = (filename: string, isSelected: boolean) => {
     const newSelectionSet = new Set(selectedForCompare);
@@ -881,10 +601,10 @@ const SIZE=100;
               </div>
               <TabsContent value={activeTab}>
                 {isLoading && !loadingStatus.includes('Analyzing new resume') && <p>Loading...</p>}
-                {!isLoading && filteredResumes.length === 0 && <EmptyState isFiltered />}
-                {!isLoading && filteredResumes.length > 0 && (
+                {!isLoading && paginatedResumes.length === 0 && <EmptyState isFiltered />}
+                {!isLoading && paginatedResumes.length > 0 && (
                   <div className="space-y-4">
-                  {filteredResumes.map((rankedResume) => (
+                  {paginatedResumes.map((rankedResume) => (
                       <div key={rankedResume.filename} className="flex items-center gap-4">
                           <Checkbox
                               id={`compare-${rankedResume.filename}`}
@@ -899,6 +619,7 @@ const SIZE=100;
                                   details={analysisResult.details[rankedResume.filename]}
                                   status={candidateStatuses[rankedResume.filename] || 'none'}
                                   onStatusChange={(newStatus) => handleStatusChange(rankedResume.filename, newStatus)}
+                                  weights={weights}
                               />
                           </div>
                            <Button variant="ghost" size="icon" onClick={() => handleView(rankedResume.filename)}>
@@ -910,6 +631,27 @@ const SIZE=100;
                 )}
               </TabsContent>
             </Tabs>
+             {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-4 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -1156,5 +898,7 @@ const SIZE=100;
     </div>
   );
 }
+
+    
 
     

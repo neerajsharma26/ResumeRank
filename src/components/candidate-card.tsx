@@ -29,6 +29,8 @@ import { Award, Briefcase, ChevronDown, Star, Tag, MoreVertical, CheckCircle, XC
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from './ui/skeleton';
+import type { MetricWeights } from '@/lib/types';
+
 
 
 interface CandidateCardProps {
@@ -36,6 +38,7 @@ interface CandidateCardProps {
   rankedResume: RankResumesOutput[0];
   details?: AnalysisDetails[string];
   status: CandidateStatus;
+  weights:MetricWeights;
   onStatusChange: (status: CandidateStatus) => void;
 }
 
@@ -51,6 +54,7 @@ export default function CandidateCard({
   rankedResume,
   details,
   status,
+  weights,
   onStatusChange,
 }: CandidateCardProps) {
 
@@ -60,7 +64,6 @@ export default function CandidateCard({
       : rankedResume.score > 60
       ? 'bg-yellow-500'
       : 'bg-red-500';
-  
   const statusConfig = {
     none: { text: 'Actions', className: '' },
     shortlisted: { text: 'Shortlisted', className: 'bg-green-100 text-green-800 hover:bg-green-200 border-green-200' },
@@ -91,7 +94,7 @@ export default function CandidateCard({
                 {rankedResume.score}
                 <span className="text-xs ml-1 mt-1">/100</span>
              </Badge>
-             <p className="text-xs text-muted-foreground">Relevance Score</p>
+             <p className="text-xs text-muted-foreground">Relevance Score</p> 
              <DropdownMenu>
               <DropdownMenuTrigger asChild>
                  <Button variant="outline" size="sm" className={cn("w-full", statusConfig[status].className)}>
@@ -128,7 +131,7 @@ export default function CandidateCard({
         <AccordionItem value="details" className="border-b-0">
           <div className="px-6">
             <AccordionTrigger className="text-sm py-2 hover:no-underline justify-start gap-2">
-              Show Details <ChevronDown className="h-4 w-4" />
+              Show Details
             </AccordionTrigger>
           </div>
           <AccordionContent>
