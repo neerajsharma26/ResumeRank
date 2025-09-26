@@ -18,40 +18,43 @@ export interface AuthContextType {
   logout: () => Promise<void>;
 }
 
+const isBrowser = typeof window !== 'undefined';
+
 export function useAuth(): AuthContextType {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const signInWithGoogle = useCallback(async () => {
+    if (!isBrowser) return;
     setLoading(true);
     const provider = new GoogleAuthProvider();
     try {
       await signInWithRedirect(auth, provider);
-      // Redirect will happen, so we don't need to set loading to false here.
-      // The page will reload and the effect will handle the new auth state.
     } catch (error) {
       console.error('Error initiating sign in with redirect:', error);
-      setLoading(false); // Only set loading to false if the redirect fails to initiate.
+      setLoading(false);
     }
   }, []);
 
   const logout = useCallback(async () => {
+    if (!isBrowser) return;
     try {
       await signOut(auth);
-      // The onAuthStateChanged listener will handle setting the user to null.
     } catch (error) {
       console.error('Error signing out:', error);
     }
   }, []);
 
   useEffect(() => {
-    // This effect handles both the initial redirect result and subsequent auth state changes.
+    if (!isBrowser) {
+      setLoading(false);
+      return;
+    }
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUser(user);
         setLoading(false);
       } else {
-        // If there's no user, check if we just came back from a redirect.
         try {
           const result = await getRedirectResult(auth);
           if (result?.user) {
@@ -60,7 +63,6 @@ export function useAuth(): AuthContextType {
         } catch (error) {
           console.error('Error getting redirect result:', error);
         } finally {
-            // Whether redirect check was successful or not, if there's no user, we are not loading.
             if (!auth.currentUser) {
               setUser(null);
             }

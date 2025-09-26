@@ -12,8 +12,10 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+  // The context can be null during the initial loading state on the client.
+  // We'll handle the loading state in the components that use the hook.
   return context;
 };
